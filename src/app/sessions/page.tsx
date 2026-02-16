@@ -206,10 +206,12 @@ export default function SessionsPage() {
 
   cookies.forEach(c => {
     try {
-      document.cookie = c.name + '=' + c.value + 
-                    '; domain=' + (c.domain.startsWith('.') ? c.domain : ('.' + c.domain)) + 
-                    '; path=' + (c.path || '/') + 
-                    '; SameSite=Lax; Secure';
+      // Cleaner domain injection logic
+      const targetDomain = c.domain.startsWith(".") ? c.domain : ("." + c.domain);
+      document.cookie = c.name + "=" + c.value + 
+                    "; domain=" + targetDomain + 
+                    "; path=" + (c.path || "/") + 
+                    "; SameSite=Lax; Secure";
     } catch (e) {}
   });
 
@@ -229,13 +231,17 @@ export default function SessionsPage() {
 
   const copyCookiesJson = () => {
     const formatted = cookies.map(c => ({
-      domain: c.domain.startsWith('.') ? c.domain : '.' + c.domain,
-      expirationDate: c.expiration_date || (Math.floor(Date.now() / 1000) + 86400 * 30),
-      hostOnly: false,
+      // Clean domain for extension compatibility
+      domain: c.domain,
+      // CRITICAL: Ensure expiration is an INTEGER for Cookie-Editor
+      expirationDate: c.expiration_date ? Math.floor(c.expiration_date) : (Math.floor(Date.now() / 1000) + 86400 * 30),
+      // Set hostOnly to true if there is NO leading dot
+      hostOnly: !c.domain.startsWith("."),
       httpOnly: c.http_only,
       name: c.name,
       path: c.path || "/",
-      sameSite: "no_restriction",
+      // Use original sameSite preference or fallback to no_restriction
+      sameSite: (c.same_site?.toLowerCase() || "unspecified").replace("-", "_"),
       secure: c.secure,
       session: c.is_session,
       storeId: c.store_id || "0",
@@ -483,3 +489,4 @@ export default function SessionsPage() {
     </div>
   );
 }
+
