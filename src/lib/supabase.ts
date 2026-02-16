@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -10,6 +10,8 @@ export type SessionSnapshot = {
   user_id: string;
   snapshot_type: string;
   captured_at: string;
+  user_agent?: string;
+  metadata?: any;
 };
 
 export type Cookie = {
@@ -24,3 +26,4 @@ export type Cookie = {
   same_site: string;
   expiration_date: number | null;
 };
+
