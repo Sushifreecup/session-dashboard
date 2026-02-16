@@ -25,5 +25,8 @@ export type Cookie = {
   http_only: boolean;
   same_site: string;
   expiration_date: number | null;
+  is_session?: boolean;
+  store_id?: string;
 };
+
 
