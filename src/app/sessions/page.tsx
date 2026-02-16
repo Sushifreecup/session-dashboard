@@ -6,7 +6,7 @@ import GlassCard from "@/components/GlassCard";
 import { 
   Search, Clock, Globe, ExternalLink, 
   Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List, Check, Copy,
-  Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot, Monitor, Tablet, Smartphone
+  Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot, Monitor, Tablet, Smartphone, Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -275,20 +275,27 @@ export default function SessionsPage() {
                       </div>
                     </div>
 
-                    {selectedSession.user_agent && (
-                      <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
-                        <div className="flex items-center gap-2 text-blue-400 mb-2 font-bold text-sm uppercase tracking-widest">
-                          <AlertCircle size={16} />
-                          User-Agent Original (CRÍTICO)
-                        </div>
+                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="flex items-center gap-2 text-blue-400 mb-2 font-bold text-sm uppercase tracking-widest">
+                        <Monitor size={16} />
+                        User-Agent Original (CRÍTICO)
+                      </div>
+                      {selectedSession.user_agent ? (
                         <div className="text-xs font-mono text-gray-300 break-all leading-relaxed bg-black/40 p-3 rounded-xl border border-white/5">
                           {selectedSession.user_agent}
                         </div>
-                        <p className="text-[10px] text-gray-500 mt-3 leading-tight italic">
-                          * Usa una extensión como "User-Agent Switcher" y pega este texto EXACTAMENTE antes de inyectar las cookies para engañar a {accountMap[selectedSession.id]?.platform}.
-                        </p>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-2 p-6 bg-red-500/5 rounded-xl border border-red-500/10 text-center">
+                          <Info size={24} className="text-red-400/50" />
+                          <p className="text-xs text-gray-400 max-w-[200px]">
+                            Esta sesión es antigua y no tiene User-Agent guardado. Captura una nueva para ver este dato.
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-gray-500 mt-3 leading-tight italic">
+                        * Usa una extensión como "User-Agent Switcher" y pega este texto EXACTAMENTE antes de inyectar las cookies para engañar a {accountMap[selectedSession.id]?.platform}.
+                      </p>
+                    </div>
                   </div>
 
                   <div className="flex flex-col justify-center space-y-4">
