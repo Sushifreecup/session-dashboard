@@ -49,7 +49,7 @@ export default function SessionsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const getHealthStatus = (sessionCookies: Cookie[]): "active" | "expiring" | "expired" => {
+  const getHealthStatus = (sessionCookies: { name: string, expiration_date: number | null }[]): "active" | "expiring" | "expired" => {
     if (!sessionCookies || sessionCookies.length === 0) return "active";
     const now = Date.now() / 1000;
     const sessionCookie = sessionCookies.find(c => ["c_user", "ds_user_id", "auth_token", "SID", "NetflixId", "li_at", "LOGIN_INFO"].includes(c.name));
@@ -59,7 +59,7 @@ export default function SessionsPage() {
     return "active";
   };
 
-  const getPrimaryDomainFromCookies = (sessionCookies: Cookie[]): string => {
+  const getPrimaryDomainFromCookies = (sessionCookies: { domain: string }[]): string => {
     if (sessionCookies.length === 0) return "unknown.com";
     
     const domainCounts: Record<string, number> = {};
@@ -79,7 +79,7 @@ export default function SessionsPage() {
     return entries.sort((a, b) => b[1] - a[1])[0][0];
   };
 
-  const identifyAccount = (sessionCookies: Cookie[], fallbackId: string): AccountInfo => {
+  const identifyAccount = (sessionCookies: { domain: string, name: string, value: string, expiration_date: number | null }[], fallbackId: string): AccountInfo => {
     const health = getHealthStatus(sessionCookies);
     const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
     const primaryDomain = getPrimaryDomainFromCookies(sessionCookies);
@@ -457,3 +457,4 @@ export default function SessionsPage() {
     </div>
   );
 }
+
