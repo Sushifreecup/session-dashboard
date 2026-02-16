@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase, SessionSnapshot, Cookie } from "@/lib/supabase";
 import GlassCard from "@/components/GlassCard";
-import { Search, Filter, Clock, User, Globe, ExternalLink } from "lucide-react";
+import { Search, Filter, Clock, User, Globe, ExternalLink, Shield } from "lucide-react";
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
