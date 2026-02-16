@@ -1,6 +1,7 @@
 ﻿import React from "react";
 import GlassCard from "@/components/GlassCard";
-import { Database, Users, Shield, Clock } from "lucide-react";
+import { Database, Users, Shield, Clock, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 export default function Home() {
   const stats = [
@@ -35,7 +36,11 @@ export default function Home() {
         <GlassCard title="Recent Activity" className="lg:col-span-2" delay={0.4}>
           <div className="space-y-4">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors group cursor-pointer border border-transparent hover:border-white/10">
+              <Link 
+                key={i} 
+                href="/sessions"
+                className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors group cursor-pointer border border-transparent hover:border-white/10"
+              >
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
                     <Clock size={18} />
@@ -45,8 +50,11 @@ export default function Home() {
                     <p className="text-xs text-gray-500">User: user_429{i}  Captured at 2:0{i} PM</p>
                   </div>
                 </div>
-                <div className="glass-pill px-3 py-1 rounded-full text-xs font-medium text-emerald-400">Active</div>
-              </div>
+                <div className="flex items-center gap-2">
+                  <div className="glass-pill px-3 py-1 rounded-full text-[10px] font-bold text-emerald-400">ACTIVE</div>
+                  <ExternalLink size={14} className="text-gray-600 group-hover:text-blue-400 transition-colors" />
+                </div>
+              </Link>
             ))}
           </div>
         </GlassCard>
@@ -54,8 +62,15 @@ export default function Home() {
         <div className="space-y-8">
           <GlassCard title="Quick Actions" delay={0.5}>
             <div className="grid gap-3">
-              <button className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 transition-colors font-semibold text-sm shadow-lg shadow-blue-500/20">Explore All Sessions</button>
-              <button className="w-full py-3 px-4 rounded-xl glass hover:bg-white/10 transition-colors font-semibold text-sm">Export Database</button>
+              <Link 
+                href="/sessions"
+                className="flex items-center justify-center w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 transition-all font-bold text-sm shadow-lg shadow-blue-500/20 active:scale-95"
+              >
+                Explore All Sessions
+              </Link>
+              <button className="w-full py-3 px-4 rounded-xl glass hover:bg-white/10 transition-colors font-semibold text-sm">
+                Export Database
+              </button>
             </div>
           </GlassCard>
 
