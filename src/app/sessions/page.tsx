@@ -82,11 +82,18 @@ export default function SessionsPage() {
 
   const identifyAccount = (sessionCookies: { domain: string, name: string, value: string, expiration_date: number | null }[], fallbackId: string): AccountInfo => {
     const health = getHealthStatus(sessionCookies);
-    const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
     const primaryDomain = getPrimaryDomainFromCookies(sessionCookies);
+    const pd = primaryDomain.toLowerCase();
     
-    // Platform detection logic
-    if (domainStr.includes("facebook.com")) {
+    // SMART IDENTIFICATION: Use primaryDomain (most frequent) as primary signal.
+    // This prevents ubiquitous domains (Google, YouTube) from overshadowing niche ones (Blackboard).
+
+    // TIER 1: Identify by PRIMARY domain (most cookies = most likely the active site)
+    if (pd.includes("instagram.com")) {
+      const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
+      return { platform: "Instagram", identifier: igId || "Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
+    }
+    if (pd.includes("facebook.com")) {
       const fbId = sessionCookies.find(c => c.name === "c_user")?.value;
       return { platform: "Facebook", identifier: fbId || "Account", icon: Facebook, color: "text-blue-500", health, domain: "facebook.com" };
     }
@@ -94,34 +101,38 @@ export default function SessionsPage() {
       const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
       return { platform: "Instagram", identifier: igId || "Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
     }
-    if (domainStr.includes("youtube.com") || domainStr.includes("google.com/youtube")) {
+    if (pd.includes("up.edu.pe") || pd.includes("blackboard.com"))
+      return { platform: "Blackboard", identifier: "Academic Portal", icon: GraduationCap, color: "text-blue-400", health, domain: "up.edu.pe" };
+    if (pd.includes("youtube.com"))
       return { platform: "YouTube", identifier: "YouTube Viewer", icon: Youtube, color: "text-red-500", health, domain: "youtube.com" };
-    }
-    if (domainStr.includes("grok.com") || domainStr.includes("x.com/i/grok")) {
+    if (pd.includes("grok.com"))
       return { platform: "Grok AI", identifier: "AI Brain", icon: Bot, color: "text-purple-400", health, domain: "grok.com" };
-    }
-    if (domainStr.includes("linkedin.com")) {
+    if (pd.includes("linkedin.com"))
       return { platform: "LinkedIn", identifier: "Professional Profile", icon: Linkedin, color: "text-blue-600", health, domain: "linkedin.com" };
-    }
-    if (domainStr.includes("mercadolibre.com")) {
+    if (pd.includes("mercadolibre.com"))
       return { platform: "Mercado Libre", identifier: "Account", icon: ShoppingCart, color: "text-yellow-400", health, domain: "mercadolibre.com" };
-    }
-    if (domainStr.includes("gemini.google.com")) {
+    if (pd.includes("gemini.google.com"))
       return { platform: "Gemini", identifier: "LLM Session", icon: MessageSquare, color: "text-blue-300", health, domain: "gemini.google.com" };
-    }
-    if (domainStr.includes("openai.com") || domainStr.includes("chatgpt.com")) 
+    if (pd.includes("openai.com") || pd.includes("chatgpt.com"))
       return { platform: "ChatGPT", identifier: "AI Assistant", icon: Cpu, color: "text-emerald-400", health, domain: "chatgpt.com" };
-    if (domainStr.includes("kick.com"))
+    if (pd.includes("kick.com"))
       return { platform: "Kick", identifier: "Stream Session", icon: Gamepad2, color: "text-green-500", health, domain: "kick.com" };
-    if (domainStr.includes("x.com") || domainStr.includes("twitter.com"))
+    if (pd.includes("x.com") || pd.includes("twitter.com"))
       return { platform: "X / Twitter", identifier: "Social ID", icon: Twitter, color: "text-blue-400", health, domain: "x.com" };
-    if (domainStr.includes("netflix.com"))
+    if (pd.includes("netflix.com"))
       return { platform: "Netflix", identifier: "Streaming User", icon: Play, color: "text-red-600", health, domain: "netflix.com" };
-    if (domainStr.includes("up.edu.pe") || domainStr.includes("blackboard.com"))
-      return { platform: "Blackboard", identifier: "Academic Portal", icon: GraduationCap, color: "text-blue-400", health, domain: "blackboard.com" };
-    if (domainStr.includes("google.com")) {
+    if (pd.includes("google.com")) {
       const email = sessionCookies.find(c => c.name.includes("email"))?.value;
       return { platform: "Google", identifier: email || "Google User", icon: Globe, color: "text-red-400", health, domain: "google.com" };
+    }
+
+    // TIER 2: Fallback - check ALL domains if primaryDomain didn't match anything known
+    const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
+    if (domainStr.includes("up.edu.pe") || domainStr.includes("blackboard.com"))
+      return { platform: "Blackboard", identifier: "Academic Portal", icon: GraduationCap, color: "text-blue-400", health, domain: "up.edu.pe" };
+    if (domainStr.includes("instagram.com")) {
+      const igId = sessionCookies.find(c => c.name === "ds_user_id")?.value;
+      return { platform: "Instagram", identifier: igId || "Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
     }
 
     // Generic labeling for unknown platforms
