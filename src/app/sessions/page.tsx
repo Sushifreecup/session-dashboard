@@ -234,37 +234,59 @@ export default function SessionsPage() {
     const info = accountMap[selectedSession.id];
     const mainPrimaryDomain = info?.domain.toLowerCase() || "";
     
-    // SMART FILTER: Only export cookies relevant to the main platform domain
-    // Large platforms (IG, FB) fail or show annoying popups if you import Google/Ad cookies while on their domain.
+    // NOISE BLACKLIST: These cookies cause errors or are useless for auth
+    const blacklist = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "_gat", "__utma", "__utmb", "__utmc", "__utmt", "__utmz", "test_cookie"];
+
+    // SMART FILTER: Only export cookies strictly relevant to the platform
     const filteredCookies = cookies.filter(c => {
+      const name = c.name;
       const d = c.domain.toLowerCase();
-      // Keep if it matches primary domain (e.g., instagram.com)
+      
+      // 1. Skip blacklisted cookies
+      if (blacklist.some(b => b === name || name.startsWith(b + "."))) return false;
+
+      // 2. Platform-specific domain strictness
+      if (mainPrimaryDomain.includes("instagram.com")) {
+          // Instagram: Only allow .instagram.com and essential .facebook.com
+          if (d.includes("instagram.com")) return true;
+          // Only allow FB cookies if they look like auth tokens
+          if (d.includes("facebook.com") && (name === "c_user" || name === "xs" || name === "datr")) return true;
+          return false;
+      }
+      
+      if (mainPrimaryDomain.includes("facebook.com")) {
+          if (d.includes("facebook.com") || d.includes("messenger.com")) return true;
+          return false;
+      }
+
+      if (mainPrimaryDomain.includes("google.com") || mainPrimaryDomain.includes("youtube.com")) {
+          if (d.includes("google.com") || d.includes("youtube.com")) return true;
+          return false;
+      }
+
+      // Default: Match primary domain or be very restrictive
       if (d.includes(mainPrimaryDomain)) return true;
-      // Allow related auth domains
-      if (mainPrimaryDomain.includes("instagram") && d.includes("facebook.com")) return true;
-      if (mainPrimaryDomain.includes("youtube") && d.includes("google.com")) return true;
-      // Default fallback for small cookie sets
-      return cookies.length < 15;
+      
+      // Fallback for unidentified: Only allow current domain or small sets
+      return cookies.length < 10;
     });
 
     const formatted = filteredCookies.map(c => {
       const isHostPrefix = c.name.startsWith("__Host-");
       const isSecurePrefix = c.name.startsWith("__Secure-");
       
-      // Cookie-Editor / Chrome STRICT rules (RFC 6265bis):
-      // 1. __Host- MUST NOT have a domain attribute in the JSON (Cookie-Editor treats empty as host-only)
-      // 2. __Host- MUST have path="/"
-      // 3. __Host- and __Secure- MUST have secure=true
-      
+      // Map SameSite: "no_restriction" is most compatible for cross-domain imports
+      let sameSite = (c.same_site?.toLowerCase() || "no_restriction").replace("-", "_");
+      if (sameSite === "unspecified") sameSite = "no_restriction";
+
       return {
-        // Clear domain for __Host- prefixed cookies
         domain: isHostPrefix ? "" : (c.domain.startsWith(".") ? c.domain : "." + c.domain),
         expirationDate: c.expiration_date ? Math.floor(c.expiration_date) : undefined,
         hostOnly: isHostPrefix ? true : !c.domain.startsWith("."),
         httpOnly: c.http_only,
         name: c.name,
         path: isHostPrefix ? "/" : (c.path || "/"),
-        sameSite: (c.same_site?.toLowerCase() || "unspecified").replace("-", "_"),
+        sameSite: sameSite,
         secure: (isHostPrefix || isSecurePrefix) ? true : c.secure,
         session: c.is_session,
         storeId: c.store_id || "0",
