@@ -235,19 +235,25 @@ export default function SessionsPage() {
     const info = accountMap[selectedSession.id];
     const targetDomain = info?.domain.toLowerCase() || "";
     
-    // NOISE BLACKLIST: These tracking/ad cookies fail when imported across domains
-    const blacklist = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "test_cookie"];
-
-    // ULTRA-STRICT FILTER: Only export cookies strictly belonging to the site
+    // BALANCED FILTER: Allow target domain + linked auth domains
+    // This ensures SSO flows (FB -> IG) remain intact.
     const filteredCookies = cookies.filter(c => {
-      const name = c.name;
       const d = c.domain.toLowerCase();
+      const n = c.name;
       
-      // 1. Skip blacklisted cookies
-      if (blacklist.some(b => b === name)) return false;
+      // BLACKLIST: Specifically target problematic tracking cookies that fail imports
+      // adding sp_id.9ec1 and others found in screenshots
+      const noisyNames = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "test_cookie", "ps_l", "ps_n"];
+      if (noisyNames.some(b => b === n || n.startsWith("sp_id."))) return false;
 
-      // 2. Strict Domain Match (No cross-domain junk)
-      // e.g., if target is instagram.com, ONLY allow .instagram.com, www.instagram.com
+      // Allow platform cookies
+      if (targetDomain.includes("instagram")) {
+          // Instagram needs instagram.com and essential facebook.com sessions
+          return d.includes("instagram.com") || d.includes("facebook.com");
+      }
+      if (targetDomain.includes("facebook")) {
+          return d.includes("facebook.com") || d.includes("messenger.com");
+      }
       return d.includes(targetDomain);
     });
 
@@ -255,20 +261,23 @@ export default function SessionsPage() {
       const isHost = c.name.startsWith("__Host-");
       const isSecure = c.name.startsWith("__Secure-");
       
-      // 90-day persistence to avoid session loss on F5
-      const ninetyDaysFromNow = Math.floor(Date.now() / 1000) + 86400 * 90;
+      // PERSISTENCE: 90 Days
+      const farFuture = Math.floor(Date.now() / 1000) + 86400 * 90;
 
       return {
         // RFC 6265bis: __Host- MUST NOT have a domain attribute
         domain: isHost ? "" : (c.domain.startsWith('.') ? c.domain : '.' + c.domain),
-        expirationDate: ninetyDaysFromNow,
+        expirationDate: farFuture,
         hostOnly: isHost ? true : !c.domain.startsWith("."),
         httpOnly: c.http_only,
         name: c.name,
         path: isHost ? "/" : (c.path || "/"),
-        sameSite: "no_restriction", // Best for session restoration
-        secure: (isHost || isSecure) ? true : c.secure,
-        session: false, // Ensure persistence
+        // SECURE-SAMESITE HARMONY: 
+        // Modern browsers require Secure=true if SameSite=None (no_restriction)
+        // If we don't set Secure:true, the cookie is SILENTLY REJECTED.
+        sameSite: "no_restriction", 
+        secure: true, // FORCE SECURE for 100% acceptance of the Mirror
+        session: false,
         storeId: c.store_id || "0",
         value: c.value
       };
