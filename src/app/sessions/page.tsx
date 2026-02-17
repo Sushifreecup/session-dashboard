@@ -69,7 +69,7 @@ export default function SessionsPage() {
     const domainCounts: Record<string, number> = {};
     usageList.forEach(domain => {
       // Clean domain: Remove leading dot and convert to lowercase
-      const d = c.domain.replace(/^\./, "").toLowerCase();
+      const d = domain.replace(/^\./, "").toLowerCase();
       // Ignore common noise domains
       if (!d.includes("fwmrm.net") && !d.includes("doubleclick") && !d.includes("analytics") && !d.includes("pixel") && !d.includes("googletagmanager")) {
         domainCounts[d] = (domainCounts[d] || 0) + 1;
@@ -77,7 +77,7 @@ export default function SessionsPage() {
     });
 
     const entries = Object.entries(domainCounts);
-    if (entries.length === 0) return sessionCookies[0].domain.replace(/^\./, "");
+    if (entries.length === 0) return usageList[0].replace(/^\./, "");;
     
     // Sort by frequency and return the top domain
     return entries.sort((a, b) => b[1] - a[1])[0][0];
@@ -396,7 +396,7 @@ export default function SessionsPage() {
     
     // FINAL MIRROR FILTER: Inclusive domain matching (Platform + Auth)
     const filteredCookies = cookies.filter(c => {
-      const d = c.domain.toLowerCase();
+      const d = domain.toLowerCase();
       // Blacklist known tracking junk that blocks imports
       const noisy = ["fr", "tr", "_fbp", "ar_debug", "test_cookie", "ps_l", "ps_n"];
       if (noisy.some(b => b === c.name)) return false;
