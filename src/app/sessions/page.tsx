@@ -397,7 +397,7 @@ export default function SessionsPage() {
     
     // FINAL MIRROR FILTER: Inclusive domain matching (Platform + Auth)
     const filteredCookies = cookies.filter(c => {
-      const d = domain.toLowerCase();
+      const d = c.domain.toLowerCase();
       // Blacklist known tracking junk that blocks imports
       const noisy = ["fr", "tr", "_fbp", "ar_debug", "test_cookie", "ps_l", "ps_n"];
       if (noisy.some(b => b === c.name)) return false;
