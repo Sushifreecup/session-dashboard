@@ -643,6 +643,7 @@ export default function SessionsPage() {
                               DISMISS
                             </button>
                           </div>
+                          
                           {webStorage.length > 0 && (
                             <button 
                               onClick={copyWhatsAppScript}
@@ -651,7 +652,6 @@ export default function SessionsPage() {
                               {copiedStorage ? <><Check size={24} /> SCRIPT COPIADO</> : <><Download size={24} /> RESTORE DEEP STORAGE ({webStorage.length} entries)</>}
                             </button>
                           )}
-                          </div>
                         </div>
                       </div>
                       <div className="p-6 rounded-[2.5rem] bg-amber-500/5 border border-amber-500/20 flex gap-6 shadow-inner">
