@@ -470,7 +470,7 @@ export default function SessionsPage() {
                               onClick={copyCookiesJson}
                               className={"flex-1 flex items-center justify-center gap-4 p-6 rounded-[2rem] glass font-black text-sm uppercase tracking-widest transition-all " + (copiedJson ? "text-emerald-400 border-emerald-500/40 shadow-emerald-500/10" : "text-white/70 hover:bg-white/10 border-white/10 shadow-2xl")}
                             >
-                              {copiedJson ? <><Check size={24} /> JSON PACKED</> : <><FileJson size={24} /> CLONE JSON (SAFE)</>}
+                              {copiedJson ? <><Check size={24} /> JSON COPIADO</> : <><FileJson size={24} /> COPIAR JSON (RECOMENDADO)</>}
                             </button>
                             <button onClick={() => setSelectedSession(null)} className="px-10 py-6 rounded-[2rem] glass font-black text-white/30 text-sm uppercase tracking-widest border-white/10 hover:text-white/60 transition-colors">
                               DISMISS
