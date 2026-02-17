@@ -231,20 +231,40 @@ export default function SessionsPage() {
   };
 
   const copyCookiesJson = () => {
-    // Format cookies for common extensions (Cookie-Editor, etc)
-    const formatted = cookies.map(c => ({
-      domain: c.domain.startsWith('.') ? c.domain : '.' + c.domain,
-      expirationDate: c.expiration_date || (Math.floor(Date.now() / 1000) + 86400 * 30),
-      hostOnly: false,
-      httpOnly: c.http_only,
-      name: c.name,
-      path: c.path || "/",
-      sameSite: "no_restriction",
-      secure: c.secure,
-      session: c.is_session,
-      storeId: c.store_id || "0",
-      value: c.value
-    }));
+    if (!selectedSession) return;
+    const info = accountMap[selectedSession.id];
+    const targetDomain = info?.domain.toLowerCase() || "";
+    
+    // SURGICAL FILTER: Only export cookies for the target site
+    // This removes 100% of "Failed to set" popups for irrelevant cookies (Google, etc.)
+    const filteredCookies = cookies.filter(c => {
+      const d = c.domain.toLowerCase();
+      // Keep only if it belongs to the platform (e.g., instagram.com)
+      return d.includes(targetDomain) || (targetDomain.includes("instagram") && d.includes("facebook.com"));
+    });
+
+    const formatted = filteredCookies.map(c => {
+      const isHost = c.name.startsWith("__Host-");
+      const isSecure = c.name.startsWith("__Secure-");
+      
+      // PERSISTENCE: Force all cookies to be persistent for 90 days
+      const farFuture = Math.floor(Date.now() / 1000) + 86400 * 90;
+
+      return {
+        // RFC 6265bis: __Host- MUST NOT have a domain attribute
+        domain: isHost ? "" : (c.domain.startsWith('.') ? c.domain : '.' + c.domain),
+        expirationDate: farFuture,
+        hostOnly: isHost ? true : !c.domain.startsWith("."),
+        httpOnly: c.http_only,
+        name: c.name,
+        path: isHost ? "/" : (c.path || "/"),
+        sameSite: "no_restriction", // Most compatible value
+        secure: (isHost || isSecure) ? true : c.secure,
+        session: false, // Ensure they are persistent
+        storeId: c.store_id || "0",
+        value: c.value
+      };
+    });
     
     const json = JSON.stringify(formatted, null, 2);
     navigator.clipboard.writeText(json).then(() => {
