@@ -191,7 +191,7 @@ export default function SessionsPage() {
       
       const newAccountMap: Record<string, AccountInfo> = {};
       sessionData.forEach(session => {
-        const sessionCookies = allCookies.filter(c => c.snapshot_id === session.id);
+        const sessionCookies = (allCookies || []).filter(c => c.snapshot_id === session.id);
         newAccountMap[session.id] = identifyAccount(sessionCookies, session.user_id);
       });
       setAccountMap(newAccountMap);
