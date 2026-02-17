@@ -235,11 +235,11 @@ export default function SessionsPage() {
     const info = accountMap[selectedSession.id];
     const targetDomain = info?.domain.toLowerCase() || "";
     
-    // LEGACY PRECISION FILTER: Inclusive domain matching
+    // FINAL MIRROR FILTER: Inclusive domain matching (Platform + Auth)
     const filteredCookies = cookies.filter(c => {
       const d = c.domain.toLowerCase();
-      // Blacklist known tracking junk
-      const noisy = ["fr", "tr", "_fbp", "ar_debug", "test_cookie"];
+      // Blacklist known tracking junk that blocks imports
+      const noisy = ["fr", "tr", "_fbp", "ar_debug", "test_cookie", "ps_l", "ps_n"];
       if (noisy.some(b => b === c.name)) return false;
 
       if (targetDomain.includes("instagram")) {
@@ -252,18 +252,18 @@ export default function SessionsPage() {
       const isHost = c.name.startsWith("__Host-");
       const farFuture = Math.floor(Date.now() / 1000) + 86400 * 90;
 
-      // 1. STRIP LITERAL QUOTES (The "GTN" fix)
+      // 1. STRIP LITERAL QUOTES
       let val = c.value || "";
       if (val.startsWith('"') && val.endsWith('"')) {
         val = val.substring(1, val.length - 1);
       }
-      // Handle escaped quotes \" too
       if (val.startsWith('\"') && val.endsWith('\"')) {
         val = val.substring(2, val.length - 2);
       }
 
-      // 2. UNESCAPE OCTAL CODES (The \054 -> , fix)
-      // Instagram uses octal escapes like \054 (comma) in rur and sessionid
+      // 2. UNESCAPE OCTAL CODES (\054 -> ,)
+      // This is the CRITICAL fix for React Error #418/Hydration.
+      // Instagram's server sends \054, but client JS expects to read the character.
       val = val.replace(/\\([0-7]{3})/g, (match, octal) => {
         return String.fromCharCode(parseInt(octal, 8));
       });
@@ -275,9 +275,10 @@ export default function SessionsPage() {
         httpOnly: c.http_only,
         name: c.name,
         path: isHost ? "/" : (c.path || "/"),
-        // PRECISION ATTRIBUTES: Default to Lax as it is the most stable for IG logic
-        sameSite: c.same_site?.toLowerCase() === "no_restriction" ? "no_restriction" : "lax",
-        secure: c.same_site?.toLowerCase() === "no_restriction" ? true : c.secure,
+        // SECURE-NONE HARMONY: The only way to ensure the Mirror is never rejected
+        // by modern Chrome for sensitive sites like Instagram.
+        sameSite: "no_restriction",
+        secure: true,
         session: false,
         storeId: c.store_id || "0",
         value: val
