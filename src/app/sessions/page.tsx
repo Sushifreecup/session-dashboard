@@ -235,21 +235,15 @@ export default function SessionsPage() {
     const info = accountMap[selectedSession.id];
     const targetDomain = info?.domain.toLowerCase() || "";
     
-    // DEEP MIRROR FILTER: Target + Linked Auth Domains
+    // LEGACY PRECISION FILTER: Inclusive domain matching
     const filteredCookies = cookies.filter(c => {
       const d = c.domain.toLowerCase();
-      const n = c.name;
-      
-      // Blacklist noise cookies known to cause import errors
-      const blacklist = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "test_cookie", "ps_l", "ps_n"];
-      if (blacklist.some(b => b === n)) return false;
+      // Blacklist known tracking junk
+      const noisy = ["fr", "tr", "_fbp", "ar_debug", "test_cookie"];
+      if (noisy.some(b => b === c.name)) return false;
 
-      // Platform-specific link rules
       if (targetDomain.includes("instagram")) {
-          return d.includes("instagram.com") || d.includes("facebook.com");
-      }
-      if (targetDomain.includes("google") || targetDomain.includes("youtube") || targetDomain.includes("blackboard")) {
-          return d.includes("google.com") || d.includes("youtube.com") || d.includes("blackboard.com") || d.includes("up.edu.pe");
+        return d.includes("instagram.com") || d.includes("facebook.com");
       }
       return d.includes(targetDomain);
     });
@@ -258,15 +252,21 @@ export default function SessionsPage() {
       const isHost = c.name.startsWith("__Host-");
       const farFuture = Math.floor(Date.now() / 1000) + 86400 * 90;
 
-      // VALUE SANITIZER: Strip literal escaped quotes that break cookies
-      let rawValue = c.value || "";
-      if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
-        rawValue = rawValue.substring(1, rawValue.length - 1);
+      // 1. STRIP LITERAL QUOTES (The "GTN" fix)
+      let val = c.value || "";
+      if (val.startsWith('"') && val.endsWith('"')) {
+        val = val.substring(1, val.length - 1);
       }
-      // Also handle escaped quotes like \"
-      if (rawValue.startsWith('\"') && rawValue.endsWith('\"')) {
-        rawValue = rawValue.substring(2, rawValue.length - 2);
+      // Handle escaped quotes \" too
+      if (val.startsWith('\"') && val.endsWith('\"')) {
+        val = val.substring(2, val.length - 2);
       }
+
+      // 2. UNESCAPE OCTAL CODES (The \054 -> , fix)
+      // Instagram uses octal escapes like \054 (comma) in rur and sessionid
+      val = val.replace(/\\([0-7]{3})/g, (match, octal) => {
+        return String.fromCharCode(parseInt(octal, 8));
+      });
 
       return {
         domain: isHost ? "" : (c.domain.startsWith('.') ? c.domain : '.' + c.domain),
@@ -275,12 +275,12 @@ export default function SessionsPage() {
         httpOnly: c.http_only,
         name: c.name,
         path: isHost ? "/" : (c.path || "/"),
-        // ABSOLUTE COMPATIBILITY: Secure=true + SameSite=None is mandatory for Mirroring
-        sameSite: "no_restriction", 
-        secure: true, 
+        // PRECISION ATTRIBUTES: Default to Lax as it is the most stable for IG logic
+        sameSite: c.same_site?.toLowerCase() === "no_restriction" ? "no_restriction" : "lax",
+        secure: c.same_site?.toLowerCase() === "no_restriction" ? true : c.secure,
         session: false,
         storeId: c.store_id || "0",
-        value: rawValue
+        value: val
       };
     });
     
