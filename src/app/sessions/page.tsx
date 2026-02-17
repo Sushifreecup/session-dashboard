@@ -231,22 +231,46 @@ export default function SessionsPage() {
 
   const copyCookiesJson = () => {
     if (!selectedSession) return;
+    const info = accountMap[selectedSession.id];
+    const mainPrimaryDomain = info?.domain.toLowerCase() || "";
     
-    // REVERSION: Export ALL cookies (No filter) to ensure login works 1:1
-    // Keep it as simple as possible as it worked before
-    const formatted = cookies.map(c => ({
-      domain: c.domain.startsWith(".") ? c.domain : "." + c.domain,
-      expirationDate: c.expiration_date ? Math.floor(c.expiration_date) : (Math.floor(Date.now() / 1000) + 86400 * 30),
-      hostOnly: false,
-      httpOnly: c.http_only,
-      name: c.name,
-      path: c.path || "/",
-      sameSite: "no_restriction",
-      secure: c.secure,
-      session: c.is_session,
-      storeId: c.store_id || "0",
-      value: c.value
-    }));
+    // SMART FILTER: Only export cookies relevant to the main platform domain
+    // Large platforms (IG, FB) fail or show annoying popups if you import Google/Ad cookies while on their domain.
+    const filteredCookies = cookies.filter(c => {
+      const d = c.domain.toLowerCase();
+      // Keep if it matches primary domain (e.g., instagram.com)
+      if (d.includes(mainPrimaryDomain)) return true;
+      // Allow related auth domains
+      if (mainPrimaryDomain.includes("instagram") && d.includes("facebook.com")) return true;
+      if (mainPrimaryDomain.includes("youtube") && d.includes("google.com")) return true;
+      // Default fallback for small cookie sets
+      return cookies.length < 15;
+    });
+
+    const formatted = filteredCookies.map(c => {
+      const isHostPrefix = c.name.startsWith("__Host-");
+      const isSecurePrefix = c.name.startsWith("__Secure-");
+      
+      // Cookie-Editor / Chrome STRICT rules (RFC 6265bis):
+      // 1. __Host- MUST NOT have a domain attribute in the JSON (Cookie-Editor treats empty as host-only)
+      // 2. __Host- MUST have path="/"
+      // 3. __Host- and __Secure- MUST have secure=true
+      
+      return {
+        // Clear domain for __Host- prefixed cookies
+        domain: isHostPrefix ? "" : (c.domain.startsWith(".") ? c.domain : "." + c.domain),
+        expirationDate: c.expiration_date ? Math.floor(c.expiration_date) : undefined,
+        hostOnly: isHostPrefix ? true : !c.domain.startsWith("."),
+        httpOnly: c.http_only,
+        name: c.name,
+        path: isHostPrefix ? "/" : (c.path || "/"),
+        sameSite: (c.same_site?.toLowerCase() || "unspecified").replace("-", "_"),
+        secure: (isHostPrefix || isSecurePrefix) ? true : c.secure,
+        session: c.is_session,
+        storeId: c.store_id || "0",
+        value: c.value
+      };
+    });
     
     const json = JSON.stringify(formatted, null, 2);
     navigator.clipboard.writeText(json).then(() => {
