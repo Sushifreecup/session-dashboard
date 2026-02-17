@@ -231,31 +231,20 @@ export default function SessionsPage() {
   };
 
   const copyCookiesJson = () => {
-    if (!selectedSession) return;
-    
-    // LEGACY RESTORATION: Reverting to the logic that WORKED earlier today.
-    // Exports ALL captured cookies without aggressive filtering or prefix rules.
-    const formatted = cookies.map(c => {
-      // Basic cleaning for extension compatibility
-      const targetDomain = c.domain.startsWith(".") ? c.domain : ("." + c.domain);
-      
-      // CRITICAL: Keep only the essential rounding fix
-      const expiry = c.expiration_date ? Math.floor(c.expiration_date) : undefined;
-
-      return {
-        domain: targetDomain,
-        expirationDate: expiry,
-        hostOnly: !c.domain.startsWith("."),
-        httpOnly: c.http_only,
-        name: c.name,
-        path: c.path || "/",
-        sameSite: "unspecified", 
-        secure: c.secure,
-        session: c.is_session,
-        storeId: c.store_id || "0",
-        value: c.value
-      };
-    });
+    // Format cookies for common extensions (Cookie-Editor, etc)
+    const formatted = cookies.map(c => ({
+      domain: c.domain.startsWith('.') ? c.domain : '.' + c.domain,
+      expirationDate: c.expiration_date || (Math.floor(Date.now() / 1000) + 86400 * 30),
+      hostOnly: false,
+      httpOnly: c.http_only,
+      name: c.name,
+      path: c.path || "/",
+      sameSite: "no_restriction",
+      secure: c.secure,
+      session: c.is_session,
+      storeId: c.store_id || "0",
+      value: c.value
+    }));
     
     const json = JSON.stringify(formatted, null, 2);
     navigator.clipboard.writeText(json).then(() => {
