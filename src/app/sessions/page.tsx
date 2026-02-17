@@ -18,6 +18,7 @@ interface AccountInfo {
   color: string;
   health: "active" | "expiring" | "expired";
   domain: string;
+  filterMe?: boolean;
 }
 
 const formatRelativeTime = (date: string) => {
@@ -224,7 +225,7 @@ export default function SessionsPage() {
       
       // Filter sessions
       const validSessions = sessionData.filter(s => !newAccountMap[s.id]?.filterMe);
-      const validAccountMap = {};
+      const validAccountMap: Record<string, AccountInfo> = {};
       validSessions.forEach(s => validAccountMap[s.id] = newAccountMap[s.id]);
       
       setAccountMap(validAccountMap);
