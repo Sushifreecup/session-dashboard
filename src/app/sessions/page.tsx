@@ -232,55 +232,26 @@ export default function SessionsPage() {
 
   const copyCookiesJson = () => {
     if (!selectedSession) return;
-    const info = accountMap[selectedSession.id];
-    const mainPrimaryDomain = info?.domain.toLowerCase() || "";
     
-    const blacklist = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "_gat", "__utma", "__utmb", "__utmc", "__utmt", "__utmz", "test_cookie"];
-
-    const filteredCookies = cookies.filter(c => {
-      const name = c.name;
-      const d = c.domain.toLowerCase();
-      if (blacklist.some(b => b === name || name.startsWith(b + "."))) return false;
-
-      if (mainPrimaryDomain.includes("instagram.com")) {
-          if (d.includes("instagram.com")) return true;
-          if (d.includes("facebook.com") && (name === "c_user" || name === "xs" || name === "datr")) return true;
-          return false;
-      }
-      if (mainPrimaryDomain.includes("facebook.com")) {
-          if (d.includes("facebook.com") || d.includes("messenger.com")) return true;
-          return false;
-      }
-      if (mainPrimaryDomain.includes("google.com") || mainPrimaryDomain.includes("youtube.com")) {
-          if (d.includes("google.com") || d.includes("youtube.com")) return true;
-          return false;
-      }
-      return d.includes(mainPrimaryDomain) || cookies.length < 10;
-    });
-
-    const formatted = filteredCookies.map(c => {
-      const isHostPrefix = c.name.startsWith("__Host-");
-      const isSecurePrefix = c.name.startsWith("__Secure-");
+    // LEGACY RESTORATION: Reverting to the logic that WORKED earlier today.
+    // Exports ALL captured cookies without aggressive filtering or prefix rules.
+    const formatted = cookies.map(c => {
+      // Basic cleaning for extension compatibility
+      const targetDomain = c.domain.startsWith(".") ? c.domain : ("." + c.domain);
       
-      let sameSite = (c.same_site?.toLowerCase() || "no_restriction").replace("-", "_");
-      if (sameSite === "unspecified") sameSite = "no_restriction";
-
-      // PERSISTENCE FIX: If expiration is missing or very short, force 30 days
-      const thirtyDays = Math.floor(Date.now() / 1000) + 86400 * 30;
-      const expiration = c.expiration_date && c.expiration_date > (Date.now() / 1000) + 3600 
-        ? Math.floor(c.expiration_date) 
-        : thirtyDays;
+      // CRITICAL: Keep only the essential rounding fix
+      const expiry = c.expiration_date ? Math.floor(c.expiration_date) : undefined;
 
       return {
-        domain: isHostPrefix ? "" : (c.domain.startsWith(".") ? c.domain : "." + c.domain),
-        expirationDate: expiration,
-        hostOnly: isHostPrefix ? true : !c.domain.startsWith("."),
+        domain: targetDomain,
+        expirationDate: expiry,
+        hostOnly: !c.domain.startsWith("."),
         httpOnly: c.http_only,
         name: c.name,
-        path: isHostPrefix ? "/" : (c.path || "/"),
-        sameSite: sameSite,
-        secure: (isHostPrefix || isSecurePrefix) ? true : c.secure,
-        session: false, // Force false to ensure it's not treated as temporary
+        path: c.path || "/",
+        sameSite: "unspecified", 
+        secure: c.secure,
+        session: c.is_session,
         storeId: c.store_id || "0",
         value: c.value
       };
