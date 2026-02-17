@@ -1,0 +1,24 @@
+﻿const fs = require('fs');
+let content = fs.readFileSync('src/app/sessions/page.tsx', 'utf8');
+
+// 1. Logic Patch
+const startTag = '  const copyCookiesJson = () => {';
+const searchMarker = '    navigator.clipboard.writeText(json).then(() => {';
+const startIndex = content.indexOf(startTag);
+const markerIndex = content.indexOf(searchMarker, startIndex);
+const closingBraceIndex = content.indexOf('  };', markerIndex);
+
+const replacement = "  const copyCookiesJson = () =\u003e {\n    if (!selectedSession) return;\n    const info = accountMap[selectedSession.id];\n    const targetDomain = info?.domain.toLowerCase() || \"\";\n    \n    // DEEP MIRROR FILTER: Target + Auth Parents\n    const filteredCookies = cookies.filter(c =\u003e {\n      const d = c.domain.toLowerCase();\n      const n = c.name;\n      \n      // Blacklist known tracking noise that blocks imports\n      const blacklist = [\"fr\", \"tr\", \"_fbp\", \"ar_debug\", \"_ga\", \"_gid\", \"ps_l\", \"ps_n\"];\n      if (blacklist.some(b =\u003e b === n)) return false;\n\n      // Inclusive check for Instagram/Facebook complex\n      if (targetDomain.includes(\"instagram\")) {\n          return d.includes(\"instagram.com\") || d.includes(\"facebook.com\");\n      }\n      return d.includes(targetDomain);\n    });\n\n    const formatted = filteredCookies.map(c =\u003e {\n      const isHost = c.name.startsWith(\"__Host-\");\n      const farFuture = Math.floor(Date.now() / 1000) + 86400 * 90;\n\n      return {\n        domain: isHost ? \"\" : (c.domain.startsWith(\u0027.\u0027) ? c.domain : \u0027.\u0027 + c.domain),\n        expirationDate: farFuture,\n        hostOnly: isHost ? true : !c.domain.startsWith(\".\"),\n        httpOnly: c.http_only,\n        name: c.name,\n        path: isHost ? \"/\" : (c.path || \"/\"),\n        // THE MAGIC FIX: Modern Chrome requires Secure=true to accept SameSite=None (no_restriction)\n        // If we don\u0027t force BOTH, the mirror is rejected silently.\n        sameSite: \"no_restriction\", \n        secure: true, \n        session: false,\n        storeId: c.store_id || \"0\",\n        value: c.value\n      };\n    });\n    \n    const json = JSON.stringify(formatted, null, 2);\n    navigator.clipboard.writeText(json).then(() =\u003e {\n      setCopiedJson(true);\n      setTimeout(() =\u003e setCopiedJson(false), 5000);\n    });\n  };";
+content = content.substring(0, startIndex) + replacement + content.substring(closingBraceIndex + 4);
+
+// 2. UI Patch
+content = content.replace(
+    'title: "Import Clone", desc: "In Cookie-Editor, use \'Import\' and paste the Safe JSON. Click \'Import\' again."', 
+    'title: "Limpieza Total", desc: "USA EL ICONO DE BASURA en Cookie-Editor para borrar cookies anteriores ANTES de importar."'
+);
+content = content.replace(
+    'title: "Import Clone", desc: "Use \'Cookie-Editor\', paste the JSON in the Import tab and click Import."', 
+    'title: "Limpieza Total", desc: "USA EL ICONO DE BASURA en Cookie-Editor para borrar cookies anteriores ANTES de importar."'
+);
+
+fs.writeFileSync('src/app/sessions/page.tsx', content, 'utf8');
