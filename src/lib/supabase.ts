@@ -12,6 +12,12 @@ export type SessionSnapshot = {
   captured_at: string;
   user_agent?: string;
   metadata?: any;
+  device_id?: string;
+  pc_name?: string;
+  os?: string;
+  ip_address?: string;
+  location_city?: string;
+  location_country?: string;
 };
 
 export type Cookie = {
