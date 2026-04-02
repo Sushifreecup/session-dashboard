@@ -27,6 +27,7 @@ export default function Home() {
   ]);
   const [activeDevices, setActiveDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteProgress, setDeleteProgress] = useState("");
 
   useEffect(() => {
     fetchDashboardData();
@@ -86,17 +87,35 @@ export default function Home() {
   };
 
   const deleteAllData = async () => {
-    if (!window.confirm("⚠️ ¿ESTÁS SEGURO? Esta acción vaciará TODA la base de datos de manera irreversible.")) {
+    if (!window.confirm("⚠️ ¿ESTÁS SEGURO? Esta acción vaciará por lotes TODA la base de datos de manera irreversible.")) {
       return;
     }
     setLoading(true);
+    setDeleteProgress("IDENTIFICANDO REGISTROS...");
     try {
-      const { error } = await supabase.from("session_snapshots").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      if (error) throw error;
-      alert("✅ Base de datos vaciada.");
+      // Fetch all snapshot IDs
+      const { data: allIds, error: fetchError } = await supabase.from("session_snapshots").select("id");
+      if (fetchError) throw fetchError;
+      
+      if (allIds && allIds.length > 0) {
+        const ids = allIds.map(i => i.id);
+        const batchSize = 100;
+        const total = ids.length;
+        
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const chunk = ids.slice(i, i + batchSize);
+          setDeleteProgress(`BORRANDO LOTE: ${Math.min(i + batchSize, total)} / ${total}...`);
+          const { error: delError } = await supabase.from("session_snapshots").delete().in("id", chunk);
+          if (delError) throw delError;
+        }
+      }
+      
+      alert("✅ Base de datos vaciada con éxito sin errores de timeout.");
+      setDeleteProgress("");
       fetchDashboardData();
     } catch (err: any) {
-      alert("❌ Error: " + err.message);
+      alert("❌ Error: " + (err.message || "Timeout persistente"));
+      setDeleteProgress("");
     } finally {
       setLoading(false);
     }
@@ -180,6 +199,9 @@ export default function Home() {
               <button onClick={deleteAllData} className="w-full py-5 px-6 rounded-[1.5rem] bg-red-500/10 hover:bg-red-500/20 transition-all font-black text-xs uppercase tracking-[0.2em] text-red-500 border border-red-500/20 flex items-center justify-center gap-2">
                 <Trash2 size={16} /> WIPE DATABASE
               </button>
+              {deleteProgress && (
+                <div className="text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse text-center">{deleteProgress}</div>
+              )}
             </div>
           </GlassCard>
 

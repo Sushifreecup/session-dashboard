@@ -47,6 +47,7 @@ export default function SessionsPage() {
   const [webStorage, setWebStorage] = useState<any[]>([]);
   const [copiedStorage, setCopiedStorage] = useState(false);
   const [deviceSearch, setDeviceSearch] = useState("");
+  const [deleteProgress, setDeleteProgress] = useState("");
 
   useEffect(() => {
     fetchSessions();
@@ -200,25 +201,37 @@ export default function SessionsPage() {
   };
 
   const deleteAllData = async () => {
-    if (!window.confirm("⚠️ ¿ESTÁS SEGURO? Esta acción eliminará TODAS las sesiones, dispositivos, cookies y almacenamiento de la base de datos de manera PERMANENTE.")) {
+    if (!window.confirm("⚠️ ¿ESTÁS SEGURO? Esta acción eliminará por lotes TODAS las sesiones de la base de datos de manera PERMANENTE.")) {
       return;
     }
     
     setLoading(true);
+    setDeleteProgress("PREPARANDO...");
     try {
-      const { error } = await supabase
-        .from("session_snapshots")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
+      const { data: allIds, error: fetchError } = await supabase.from("session_snapshots").select("id");
+      if (fetchError) throw fetchError;
 
-      if (error) throw error;
+      if (allIds && allIds.length > 0) {
+        const ids = allIds.map(i => i.id);
+        const batchSize = 100;
+        const total = ids.length;
+        
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const chunk = ids.slice(i, i + batchSize);
+          setDeleteProgress(`LIMPIANDO: ${Math.min(i + batchSize, total)} / ${total}...`);
+          const { error: delError } = await supabase.from("session_snapshots").delete().in("id", chunk);
+          if (delError) throw delError;
+        }
+      }
       
       setSessions([]);
       setAccountMap({});
       setSelectedSession(null);
-      alert("✅ Base de datos limpiada con éxito.");
+      alert("✅ Base de datos vaciada con éxito.");
+      setDeleteProgress("");
     } catch (err: any) {
-      alert("❌ Error al limpiar la base de datos: " + err.message);
+      alert("❌ Error: " + (err.message || "Timeout persistente"));
+      setDeleteProgress("");
     } finally {
       setLoading(false);
       fetchSessions();
@@ -361,7 +374,7 @@ export default function SessionsPage() {
             </div>
             <button onClick={() => fetchSessions()} className="glass p-4 rounded-2xl hover:bg-blue-500/10 border border-white/5 transition-all"><RefreshCw size={22} className={loading?"animate-spin":""} /></button>
             <button onClick={deleteAllData} className="glass flex items-center gap-2 px-6 py-3.5 rounded-2xl border border-red-500/20 font-black text-[10px] tracking-[0.2em] uppercase text-red-500 hover:bg-red-500/10 transition-all shadow-lg shadow-red-500/5">
-              <Trash2 size={20} /> PULGAR TODO
+              <Trash2 size={20} /> {deleteProgress || "PULGAR TODO"}
             </button>
             <button onClick={() => setShowGuide(!showGuide)} className="glass flex items-center gap-2 px-6 py-3.5 rounded-2xl border border-blue-500/20 font-black text-[10px] tracking-[0.2em] uppercase text-blue-400">Manual</button>
           </div>
