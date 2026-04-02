@@ -2,23 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 import GlassCard from "@/components/GlassCard";
-import { Database, Users, Shield, Clock, ExternalLink, Facebook, Instagram, Twitter, MessageSquare, Play, Mail, Bot, Globe, AlertCircle, ShoppingCart, GraduationCap, Laptop, Cpu } from "lucide-react";
+import { 
+  Database, Users, Shield, Clock, ExternalLink, Facebook, Instagram, Twitter, MessageSquare, Play, Mail, Bot, Globe, AlertCircle, ShoppingCart, GraduationCap, Laptop, Cpu, Monitor, MapPin, Trash2, Smartphone
+} from "lucide-react";
 import Link from "next/link";
 import { supabase, SessionSnapshot } from "@/lib/supabase";
-
-const platformConfig: Record<string, { icon: any; color: string }> = {
-  Facebook: { icon: Facebook, color: "text-blue-500" },
-  Instagram: { icon: Instagram, color: "text-pink-500" },
-  YouTube: { icon: Play, color: "text-red-500" },
-  Grok: { icon: Bot, color: "text-purple-400" },
-  ChatGPT: { icon: MessageSquare, color: "text-emerald-400" },
-  LinkedIn: { icon: Globe, color: "text-blue-600" },
-  Blackboard: { icon: GraduationCap, color: "text-blue-400" },
-  Google: { icon: Globe, color: "text-red-400" },
-  Kick: { icon: Play, color: "text-green-500" },
-  Netflix: { icon: Play, color: "text-red-600" },
-  Standard: { icon: Shield, color: "text-blue-400" }
-};
 
 const formatRelativeTime = (date: string) => {
   const now = new Date();
@@ -37,7 +25,7 @@ export default function Home() {
     { label: "Live Snapshots", value: "---", icon: Shield, color: "text-emerald-500" },
     { label: "Last Capture", value: "---", icon: Clock, color: "text-amber-500" },
   ]);
-  const [recentActivity, setRecentActivity] = useState<SessionSnapshot[]>([]);
+  const [activeDevices, setActiveDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,34 +36,67 @@ export default function Home() {
 
   const fetchDashboardData = async () => {
     try {
-      // 1. Fetch Total Sessions
-      const { count: sessionCount } = await supabase.from("session_snapshots").select("*", { count: "exact", head: true });
-      
-      // 2. Fetch Recent Activity
-      const { data: recentSnapshots } = await supabase
+      const { data: allSnapshots } = await supabase
         .from("session_snapshots")
         .select("*")
         .order("captured_at", { ascending: false })
-        .limit(5);
+        .limit(1000);
 
-      if (recentSnapshots && recentSnapshots.length > 0) {
-        setRecentActivity(recentSnapshots);
-        
-        // 3. Unique Users (approximated from snapshots)
-        const { data: userData } = await supabase.from("session_snapshots").select("user_id");
-        const uniqueUsers = new Set(userData?.map(u => u.user_id)).size;
+      if (!allSnapshots) return;
 
-        // 4. Update Stats
-        const lastCapture = recentSnapshots[0].captured_at;
-        setStats([
-          { label: "Total Sessions", value: sessionCount?.toLocaleString() || "0", icon: Database, color: "text-blue-500" },
-          { label: "Unique Users", value: uniqueUsers.toLocaleString(), icon: Users, color: "text-purple-500" },
-          { label: "Live Snapshots", value: sessionCount?.toLocaleString() || "0", icon: Shield, color: "text-emerald-500" },
-          { label: "Last Capture", value: formatRelativeTime(lastCapture), icon: Clock, color: "text-amber-500" },
-        ]);
-      }
+      // Group by Device
+      const grouped: Record<string, any[]> = {};
+      allSnapshots.forEach(s => {
+        const dId = s.device_id || "unknown-node";
+        if (!grouped[dId]) grouped[dId] = [];
+        grouped[dId].push(s);
+      });
+
+      const deviceList = Object.keys(grouped).map(dId => {
+        const devSess = grouped[dId];
+        const latest = devSess[0];
+        return {
+          id: dId,
+          pc_name: latest.pc_name || "Unknown Agent",
+          os: latest.os || "Unknown OS",
+          ip: latest.ip_address || "0.0.0.0",
+          location: latest.location_city ? `${latest.location_city}, ${latest.location_country || ""}` : "Remote",
+          lastSeen: latest.captured_at,
+          count: devSess.length
+        };
+      });
+
+      setActiveDevices(deviceList.slice(0, 5));
+
+      const uniqueUsers = new Set(allSnapshots.map(u => u.user_id)).size;
+      const lastCapture = allSnapshots.length > 0 ? allSnapshots[0].captured_at : "---";
+
+      setStats([
+        { label: "Intelligence Nodes", value: deviceList.length.toString(), icon: Database, color: "text-blue-500" },
+        { label: "Unique Agents", value: uniqueUsers.toString(), icon: Users, color: "text-purple-500" },
+        { label: "Active Captures", value: allSnapshots.length.toLocaleString(), icon: Shield, color: "text-emerald-500" },
+        { label: "Last Transmission", value: lastCapture !== "---" ? formatRelativeTime(lastCapture) : "---", icon: Clock, color: "text-amber-500" },
+      ]);
+
     } catch (error) {
       console.error("Dashboard fetch error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteAllData = async () => {
+    if (!window.confirm("⚠️ ¿ESTÁS SEGURO? Esta acción vaciará TODA la base de datos de manera irreversible.")) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("session_snapshots").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (error) throw error;
+      alert("✅ Base de datos vaciada.");
+      fetchDashboardData();
+    } catch (err: any) {
+      alert("❌ Error: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -85,7 +106,7 @@ export default function Home() {
     <div className="space-y-8">
       <header className="flex flex-col gap-2">
         <h2 className="text-4xl font-black tracking-tight text-white/90">System Overview</h2>
-        <p className="text-gray-500 font-medium tracking-wide uppercase text-xs">Aesthetix Intelligence & Real-Time Monitoring</p>
+        <p className="text-gray-500 font-medium tracking-wide uppercase text-xs">Multi-Device Intelligence & Real-Time Monitoring</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -105,48 +126,49 @@ export default function Home() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <GlassCard delay={0.4} className="lg:col-span-2 p-0 overflow-hidden">
           <div className="p-8 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-            <h3 className="text-sm font-black uppercase tracking-[0.3em] text-white/40">Recent Neural Activity</h3>
-            <div className="flex items-center gap-2 text-[10px] font-black text-emerald-400 bg-emerald-400/10 px-3 py-1.5 rounded-full border border-emerald-400/20 shadow-sm">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE STREAM
+            <h3 className="text-sm font-black uppercase tracking-[0.3em] text-white/40">Active Intel Nodes (By PC)</h3>
+            <div className="flex items-center gap-2 text-[10px] font-black text-blue-400 bg-blue-400/10 px-3 py-1.5 rounded-full border border-blue-400/20 shadow-sm">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> LIVE SYNC
             </div>
           </div>
           <div className="divide-y divide-white/5">
             {loading ? (
                [1,2,3,4,5].map(i => <div key={i} className="h-20 bg-white/5 animate-pulse" />)
-            ) : recentActivity.length > 0 ? (
-              recentActivity.map((session, idx) => (
+            ) : activeDevices.length > 0 ? (
+              activeDevices.map((device, idx) => (
                 <Link 
-                  key={session.id} 
+                  key={device.id} 
                   href="/sessions"
                   className="flex items-center justify-between p-7 hover:bg-white/[0.03] transition-all group border-l-4 border-transparent hover:border-blue-500"
                 >
                   <div className="flex items-center gap-6">
                     <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 shadow-inner group-hover:scale-110 transition-transform">
-                      <Clock size={20} />
+                      <Monitor size={20} />
                     </div>
                     <div>
-                      <p className="font-black text-white/90 text-lg">Snapshot #{session.id.slice(0, 4).toUpperCase()}</p>
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">
-                        PLATFORM: {session.snapshot_type.toUpperCase()} | CAPTURED {formatRelativeTime(session.captured_at)}
+                      <p className="font-black text-white/90 text-lg uppercase tracking-wider">{device.pc_name}</p>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider flex items-center gap-2">
+                        <MapPin size={12}/> {device.location} | <span className="text-blue-400/60">{device.ip}</span>
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-[10px] font-black text-gray-600 uppercase tracking-tighter">
-                      USER: {session.user_id.slice(0, 8)}
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{device.os}</p>
+                      <p className="text-[9px] font-bold text-gray-700">{formatRelativeTime(device.lastSeen)}</p>
                     </div>
                     <ExternalLink size={18} className="text-gray-700 group-hover:text-blue-400 transition-colors" />
                   </div>
                 </Link>
               ))
             ) : (
-                <div className="p-20 text-center text-gray-500 font-bold uppercase tracking-widest text-xs">No activity detected on local node.</div>
+                <div className="p-20 text-center text-gray-500 font-bold uppercase tracking-widest text-xs">No devices detected.</div>
             )}
           </div>
         </GlassCard>
 
         <div className="space-y-8">
-          <GlassCard delay={0.5} className="p-8">
+          <GlassCard delay={0.5} className="p-8 border-t-4 border-blue-500 shadow-2xl">
             <h3 className="text-[11px] font-black uppercase tracking-[0.25em] text-white/30 mb-6">Operations Hub</h3>
             <div className="grid gap-4">
               <Link 
@@ -155,8 +177,8 @@ export default function Home() {
               >
                 Access Archives
               </Link>
-              <button className="w-full py-5 px-6 rounded-[1.5rem] glass hover:bg-white/10 transition-colors font-black text-xs uppercase tracking-widest text-white/60 border border-white/5">
-                Export DB
+              <button onClick={deleteAllData} className="w-full py-5 px-6 rounded-[1.5rem] bg-red-500/10 hover:bg-red-500/20 transition-all font-black text-xs uppercase tracking-[0.2em] text-red-500 border border-red-500/20 flex items-center justify-center gap-2">
+                <Trash2 size={16} /> WIPE DATABASE
               </button>
             </div>
           </GlassCard>
@@ -165,10 +187,10 @@ export default function Home() {
             <h3 className="text-[11px] font-black uppercase tracking-[0.25em] text-white/30 mb-6">Nexus Health</h3>
             <div className="space-y-6">
               <div className="flex items-center justify-between text-[11px] font-black tracking-widest">
-                <span className="text-gray-500 uppercase">Supabase Link</span>
+                <span className="text-gray-500 uppercase">Local Grid Status</span>
                 <span className="text-emerald-400 flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
-                  SYNCHRONIZED
+                  CONNECTED
                 </span>
               </div>
               <div className="space-y-3">
