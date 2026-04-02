@@ -93,7 +93,6 @@ export default function Home() {
     setLoading(true);
     setDeleteProgress("IDENTIFICANDO REGISTROS...");
     try {
-      // Fetch all snapshot IDs
       const { data: allIds, error: fetchError } = await supabase.from("session_snapshots").select("id");
       if (fetchError) throw fetchError;
       
@@ -157,7 +156,7 @@ export default function Home() {
               activeDevices.map((device, idx) => (
                 <Link 
                   key={device.id} 
-                  href="/sessions"
+                  href={`/device/${device.id}`}
                   className="flex items-center justify-between p-7 hover:bg-white/[0.03] transition-all group border-l-4 border-transparent hover:border-blue-500"
                 >
                   <div className="flex items-center gap-6">
