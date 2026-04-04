@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import GlassCard from "@/components/GlassCard";
 import { 
-  Database, Users, Shield, Clock, ExternalLink, Facebook, Instagram, Twitter, MessageSquare, Play, Mail, Bot, Globe, AlertCircle, ShoppingCap, Monitor, MapPin, Trash2, Smartphone, Zap
+  Database, Users, Shield, Clock, ExternalLink, Facebook, Instagram, Twitter, MessageSquare, Play, Mail, Bot, Globe, AlertCircle, ShoppingCart, GraduationCap, Monitor, MapPin, Trash2, Smartphone, Zap, ChevronRight
 } from "lucide-react";
 import Link from "next/link";
 import { supabase, SessionSnapshot } from "@/lib/supabase";
