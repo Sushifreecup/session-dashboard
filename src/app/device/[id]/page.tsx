@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-export const runtime = 'edge';
+
 
 interface AccountInfo {
   platform: string;
