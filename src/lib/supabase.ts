@@ -1,7 +1,7 @@
-﻿import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = 'https://iwjwtvphqrjsuvgohigk.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3and0dnBocXJqc3V2Z29oaWdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNTMwOTcsImV4cCI6MjA4NjgyOTA5N30.h_Kn9AytUToXM0inoxZT9UBTxCrigizJ2LCNSXXBY6s';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -34,6 +34,3 @@ export type Cookie = {
   is_session?: boolean;
   store_id?: string;
 };
-
-
-
