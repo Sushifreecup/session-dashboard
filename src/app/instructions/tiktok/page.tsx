@@ -3,12 +3,12 @@ import { Music2 } from 'lucide-react';
 
 export default function TikTokInstructions() {
   return (
-    <InstructionGuide 
+    <InstructionGuide
       platform="TikTok"
       targetUrl="https://www.tiktok.com"
-      cookiesToLookFor={['sessionid', 'store-idc', 'store-country-code', 'odin_tt', 'msToken']}
+      cookiesToLookFor={['sessionid', 'sessionid_ss', 'store-idc', 'odin_tt', 'msToken', 'tt_csrf_token']}
       icon={<Music2 />}
-      colorClass="bg-cyan-500 text-cyan-400"
+      accentColor="#06b6d4"
     />
   );
 }

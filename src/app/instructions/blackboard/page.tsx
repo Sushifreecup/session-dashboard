@@ -3,12 +3,12 @@ import { GraduationCap } from 'lucide-react';
 
 export default function BlackboardInstructions() {
   return (
-    <InstructionGuide 
+    <InstructionGuide
       platform="Blackboard"
       targetUrl="https://up.blackboard.com"
-      cookiesToLookFor={['s_session_id', 'session_id']}
+      cookiesToLookFor={['s_session_id', 'session_id', 'BBLEARN_sess_id', 'web_client_cache_guid']}
       icon={<GraduationCap />}
-      colorClass="bg-purple-500 text-purple-400"
+      accentColor="#a855f7"
     />
   );
 }

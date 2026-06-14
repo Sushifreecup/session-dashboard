@@ -3,12 +3,12 @@ import { HardDrive } from 'lucide-react';
 
 export default function DriveInstructions() {
   return (
-    <InstructionGuide 
+    <InstructionGuide
       platform="Google Drive"
       targetUrl="https://drive.google.com"
-      cookiesToLookFor={['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID']}
+      cookiesToLookFor={['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID', 'LSID']}
       icon={<HardDrive />}
-      colorClass="bg-blue-500 text-blue-400"
+      accentColor="#3b82f6"
     />
   );
 }

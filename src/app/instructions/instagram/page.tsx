@@ -3,12 +3,12 @@ import { Instagram } from 'lucide-react';
 
 export default function InstagramInstructions() {
   return (
-    <InstructionGuide 
+    <InstructionGuide
       platform="Instagram"
       targetUrl="https://www.instagram.com"
-      cookiesToLookFor={['sessionid', 'csrftoken', 'ds_user_id']}
+      cookiesToLookFor={['sessionid', 'csrftoken', 'ds_user_id', 'rur', 'mid']}
       icon={<Instagram />}
-      colorClass="bg-pink-500 text-pink-400"
+      accentColor="#ec4899"
     />
   );
 }

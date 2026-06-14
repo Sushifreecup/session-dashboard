@@ -3,12 +3,12 @@ import { Mail } from 'lucide-react';
 
 export default function GmailInstructions() {
   return (
-    <InstructionGuide 
+    <InstructionGuide
       platform="Gmail"
       targetUrl="https://mail.google.com"
-      cookiesToLookFor={['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID']}
+      cookiesToLookFor={['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID', 'LSID']}
       icon={<Mail />}
-      colorClass="bg-red-500 text-red-400"
+      accentColor="#ef4444"
     />
   );
 }
