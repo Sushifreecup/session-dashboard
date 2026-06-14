@@ -35,19 +35,47 @@ export function SessionModal({ session, cookies, webStorage, onClose }: SessionM
       ? cookies.filter(c => c.domain.includes(domainOnly))
       : cookies;
 
-    const json = targetCookies.map(c => ({
-      name: c.name,
-      value: c.value,
-      domain: c.domain,
-      path: c.path || '/',
-      secure: c.secure || false,
-      httpOnly: c.http_only || false,
-      sameSite: c.same_site === 'no_restriction' ? 'no_restriction' : (c.same_site || 'unspecified'),
-      expirationDate: c.expiration_date || undefined,
-      session: c.is_session || false,
-      storeId: c.store_id || '0',
-      hostOnly: false,
-    }));
+    const json = targetCookies.map(c => {
+      const isHost = c.name.startsWith('__Host-');
+      const isSecurePrefix = c.name.startsWith('__Secure-');
+      
+      let finalDomain = c.domain;
+      let isHostOnly = false;
+      
+      // Las cookies __Host- tienen reglas estrictas: sin punto inicial y path=/
+      if (isHost) {
+        finalDomain = finalDomain.replace(/^\./, '');
+        isHostOnly = true;
+      } else if (!finalDomain.startsWith('.')) {
+        isHostOnly = true;
+      }
+
+      // Sanitizar sameSite
+      let finalSameSite = 'unspecified';
+      if (c.same_site === 'no_restriction' || c.same_site === 'None') finalSameSite = 'no_restriction';
+      if (c.same_site === 'lax' || c.same_site === 'Lax') finalSameSite = 'lax';
+      if (c.same_site === 'strict' || c.same_site === 'Strict') finalSameSite = 'strict';
+
+      // Sanitizar expirationDate (Cookie-Editor falla si está en el pasado o es inválido)
+      let expDate = c.expiration_date;
+      if (expDate && expDate < (Date.now() / 1000)) {
+        expDate = undefined;
+      }
+
+      return {
+        name: c.name,
+        value: c.value,
+        domain: finalDomain,
+        path: isHost ? '/' : (c.path || '/'),
+        secure: isHost || isSecurePrefix ? true : (c.secure || false),
+        httpOnly: c.http_only || false,
+        sameSite: finalSameSite,
+        expirationDate: expDate,
+        session: !expDate,
+        storeId: c.store_id || '0',
+        hostOnly: isHostOnly,
+      };
+    });
 
     navigator.clipboard.writeText(JSON.stringify(json, null, 2)).then(() => {
       setCopied('cookieeditor-' + (domainOnly || 'all'));
