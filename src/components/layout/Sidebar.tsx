@@ -9,17 +9,12 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const handleClearDB = async () => {
-    if (window.confirm('¿Estás seguro de que quieres limpiar toda la base de datos? Esto eliminará todas las sesiones y cookies capturadas. Esta acción no se puede deshacer.')) {
+    if (window.confirm('¿Estás seguro de que quieres limpiar toda la base de datos? Esto eliminará TODAS las sesiones y cookies capturadas.')) {
       try {
-        const { data: snapshots } = await supabase.from('session_snapshots').select('id');
-        if (snapshots && snapshots.length > 0) {
-          const ids = snapshots.map(s => s.id);
-          await supabase.from('session_snapshots').delete().in('id', ids);
-          alert('Base de datos limpiada correctamente. La página se recargará.');
-          window.location.href = '/';
-        } else {
-          alert('La base de datos ya está vacía.');
-        }
+        const { error } = await supabase.from('session_snapshots').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (error) throw error;
+        alert('Base de datos limpiada correctamente.');
+        window.location.href = '/';
       } catch (error) {
         console.error('Error clearing DB:', error);
         alert('Error al limpiar la base de datos.');
