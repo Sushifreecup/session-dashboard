@@ -131,7 +131,7 @@ export function SessionModal({ session, cookies, webStorage, onClose }: SessionM
             </button>
 
             {/* Per-domain quick buttons */}
-            {domains.slice(0, 5).map(d => (
+            {domains.map(d => (
               <button
                 key={d}
                 onClick={() => handleCopyCookieEditorJSON(d)}
