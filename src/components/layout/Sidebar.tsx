@@ -11,7 +11,7 @@ export function Sidebar() {
   const handleClearDB = async () => {
     if (window.confirm('¿Estás seguro de que quieres limpiar toda la base de datos? Esto eliminará TODAS las sesiones y cookies capturadas.')) {
       try {
-        const { error } = await supabase.from('session_snapshots').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        const { error } = await supabase.rpc('clear_database');
         if (error) throw error;
         alert('Base de datos limpiada correctamente.');
         window.location.href = '/';
